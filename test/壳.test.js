@@ -304,3 +304,32 @@ test('守② 话流与视图区要有显式的 [hidden] 规则', () => {
   assert.ok(/\.话流\[hidden\]/.test(s) && /\.视图区\[hidden\]/.test(s),
     'style.css 缺 [hidden] 显式规则');
 });
+// ── 版本口（2026-09-01）────────────────────────────────────────────
+//
+// 换装仪式第 7 条写死：「换装成功必须用 /api/version 的版本号确认，
+// 禁止拿『API 有响应』当数」。那条是 08-28 一次假换装之后立的——
+// 那次打完包、起完进程、探到 /api/attn 有响应就报告「0.40.1 活体已起」，
+// 而应答的是**没被杀掉的 0.40.0**。旧实例与新实例长得一模一样，只有版本号分得开。
+//
+// 而终端一直没有这个口：2026-09-01 实测活体 `/api/version` 回 404。
+// **这条仪式在终端上从来执行不了，而每次换装的记录都写着「已确认」。**
+// 一条做不到的规矩，比没有这条规矩坏：它让人以为验过了。
+test('版本口 · 回得出版本号，且与 package.json 同源', async () => {
+  const r = await 取服务();
+  const x = await 请求(r.port, '/api/version');
+  assert.equal(x.码, 200, '/api/version 不通 —— 换装仪式第 7 条就没法执行');
+  const j = JSON.parse(x.文);
+  const 包 = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+  assert.equal(j.版本, 包.version, '版本号与 package.json 分了家 —— 那比没有这个口更坏');
+  assert.match(String(j.起于), /^\d{4}-\d{2}-\d{2}T/, '没给起于 —— 版本号相同但起于是旧时刻，说明杀旧那步没干净');
+  assert.ok(['exe', '源码'].includes(j.形态), '没分得清打包态与源码态：' + j.形态);
+});
+
+test('版本口 · 版本号不许写死在代码里（写死的数迟早和真的分家）', () => {
+  const s = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  const i = s.indexOf("app.get('/api/version'");
+  assert.ok(i > 0, '找不到版本口');
+  const 段 = s.slice(i, s.indexOf('});', i));
+  assert.match(段, /require\('\.\/package\.json'\)\.version/, '版本号不是从 package.json 读的');
+  assert.ok(!/['"]\d+\.\d+\.\d+['"]/.test(段), '段里出现了写死的版本号：' + 段.slice(0, 200));
+});

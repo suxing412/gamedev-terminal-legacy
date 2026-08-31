@@ -374,6 +374,16 @@ const 变异 = [
     找: '    try { r = 查锁(p); } catch (e) { continue; }   // 闸自己坏了不拖垮坐席',
     换: "    try { r = 查锁(p); } catch (e) { r = { 行: false, 因: '闸自己坏了' }; }" },
 
+  // ── 2026-09-01 · 版本口（换装仪式第 7 条一直执行不了）──
+  { 名: '没有 /api/version（换装仪式第 7 条无从执行，而记录都写着「已确认」）',
+    档: 'server.js', 测: 'node --test test/壳.test.js',
+    找: "app.get('/api/version', (req, res) => {",
+    换: "app.get('/api/version-没了', (req, res) => {" },
+  { 名: '版本号写死在代码里（迟早和 package.json 分家）',
+    档: 'server.js', 测: 'node --test test/壳.test.js',
+    找: "  try { 版本 = require('./package.json').version || null; } catch (e) { 版本 = null; }",
+    换: "  版本 = '0.8.0';" },
+
   // ── 2026-09-01 · 壳接线（评审 S17/S18；机制那半由 test/壳内/跑道.js 在真壳里验）──
   { 名: '进塔前不松开 minWidth（半屏塔从来没窄过，形态钮落在屏外点不着）',
     档: 'main.js', 测: 'node --test test/壳接线.test.js',

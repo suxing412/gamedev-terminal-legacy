@@ -504,6 +504,20 @@ function 坐席选项(opt = {}) {
     },
     ...(CLI路径 ? { pathToClaudeCodeExecutable: CLI路径 } : {}),
     ...(opt.续 ? { resume: opt.续 } : {}),
+    // 私聊：把这一席的人设接到系统提示后面。
+    //
+    // 在这之前，座条上点谁都只是**换个皮**：私聊席 存在前端、从没发给服务端，
+    // 而说区底下那句「私聊 X · 这条线有自己的记忆，与群里那条各记各的」
+    // 是照着设计稿写的、一个字都没兑现——同一个会话、同一个人设、同一份记忆。
+    // 屏上讲了一件没发生的事，比屏上什么都不讲坏得多。
+    ...(opt.席 && opt.人设 ? {
+      systemPrompt: {
+        type: 'preset', preset: 'claude_code',
+        append: `此刻你是这间工作室的「${opt.席}」，与制作人单线说话（群里其余席位看不见这条线）。`
+          + `你的职责：${opt.人设}`
+          + '\n越出这份职责的问题，说清楚它该找哪一席，不要替那一席回答。',
+      },
+    } : {}),
   };
 }
 
@@ -570,8 +584,18 @@ function 说人话(原) {
   return 原.slice(-300);
 }
 
-const 读会话 = () => { try { return JSON.parse(fs.readFileSync(会话档, 'utf8')).id || null; } catch { return null; } };
-const 写会话 = (id) => { try { fs.writeFileSync(会话档, JSON.stringify({ id, at: new Date().toISOString() })); } catch { /* 记不住就每次新开，不阻断 */ } };
+// 会话档：群一份，每个私聊席各一份。
+//
+// 「这条线有自己的记忆」这句话，兑现在这里——不是在前端那个 class 上。
+// 席名进文件名前必须洗：名单虽然来自 坐席.js（不是用户输入），
+// 但**"它现在不是用户输入"不是路径安全的理由**，那种理由只要有人往名单里加一条就失效了。
+const 席档名 = (席) => String(席 || '').replace(/[^一-龥A-Za-z0-9_-]/g, '').slice(0, 24);
+const 会话档于 = (席) => {
+  const s = 席档名(席);
+  return s ? path.join(终端根, `.session-${s}.json`) : 会话档;
+};
+const 读会话 = (席) => { try { return JSON.parse(fs.readFileSync(会话档于(席), 'utf8')).id || null; } catch { return null; } };
+const 写会话 = (id, 席) => { try { fs.writeFileSync(会话档于(席), JSON.stringify({ id, at: new Date().toISOString() })); } catch { /* 记不住就每次新开，不阻断 */ } };
 
 app.post('/api/say', async (req, res) => {
   const 话 = String((req.body || {}).话 || '').trim();
@@ -580,6 +604,20 @@ app.post('/api/say', async (req, res) => {
   // 记它是为了让用量分得开——人在场的交互和无人值守的班次是两种负载，混在一起算额度没有意义。
   const 来路 = String((req.body || {}).来路 || '人').slice(0, 32);
 
+  // 私聊席。**在写响应头之前查完**——一旦开了 SSE 流就只能用事件报错，
+  // 而"参数不对"应当是一个 400，不该伪装成一次失败的对话。
+  const 坐席 = require('./server/lib/坐席');
+  const 席名 = String((req.body || {}).席 || '').trim();
+  let 席 = null;
+  if (席名) {
+    const s = 坐席.按名(席名);
+    if (!s) return res.status(400).json({ error: `名单里没有「${席名}」这一席` });
+    // 未接模型的席位不许开私聊：它答不出，而屏上会显示一条"正在思考"，
+    // 那正是 2026-08-31 巡礼里反复出现的那一种——看着在动，其实没有人在。
+    if (!s.接模型) return res.status(400).json({ error: `${席名} 还没接模型，说了没人应` });
+    席 = s;
+  }
+
   res.writeHead(200, {
     'Content-Type': 'text/event-stream; charset=utf-8',
     'Cache-Control': 'no-cache',
@@ -587,7 +625,7 @@ app.post('/api/say', async (req, res) => {
   });
   const 发 = (类, 数据) => { try { res.write(`event: ${类}\ndata: ${JSON.stringify(数据)}\n\n`); } catch { /* 已断 */ } };
 
-  const 续 = 读会话();
+  const 续 = 读会话(席 && 席.名);
   // 代理注入（记忆坑）：裸环境连不上 api.anthropic.com。SDK 把 env 透给它拉起的子进程。
   // 代理用模块级那一份（本文件顶部），不在这里再声明一次——同一个值存两份就会有一天只改一份
 
@@ -600,11 +638,11 @@ app.post('/api/say', async (req, res) => {
     const query = await 取query();
     const q = query({
       prompt: 占用告示() + 话,                // 中文直接进 SDK，不经 argv/shell——那条坑绕开了
-      options: 坐席选项({ 续 }),
+      options: 坐席选项({ 续, 席: 席 && 席.名, 人设: 席 && 席.人设 }),
     });
     for await (const m of q) {
       if (断) break;
-      if (m.session_id) 写会话(m.session_id);
+      if (m.session_id) 写会话(m.session_id, 席 && 席.名);
 
       if (m.type === 'stream_event') {
         const d = m.event && m.event.delta;
@@ -622,7 +660,8 @@ app.post('/api/say', async (req, res) => {
         // 「真正缺的基线只有一条口子能开——server.js 把 m.usage 落盘，现在这行没写」。
         // 一班烧多少、烧穿了没有，只能靠真实读数说话，不能靠估。
         // 落在终端根（数据根，非 %TEMP%），append-only，写不动只记不炸。
-        记用量(来路, m);
+        // 私聊单独计：群里那条线和八条私线烧的是同一份额度，混着记就看不出是谁在烧
+        记用量(席 ? `${来路}·${席.名}` : 来路, m);
         if (m.is_error && !报告) {
           发('崩', { 因: 说人话(String(m.result || m.subtype || '未知错误')) });
         } else {
@@ -1258,7 +1297,9 @@ function start(首选 = 端口) {
 // 坐席选项 也导出：文稿台占用闸挂在它的 hooks 上，而「闸有没有真的接上」
 // 是这次验收里唯一缺的那条判据——外部可写() 曾经写好了、判据齐了、**零调用点**。
 // 不导出的话这条判据就只能 grep 源码，那不算判据（H104）。
-module.exports = { start, app, 坐席选项 };
+// 席档名/会话档于 导出是为了**够得着判据**：它们决定私聊的记忆落在哪个文件上，
+// 而 H104 的口径是判据要验行为——不导出的话只能 grep 源码文本，那不算判据。
+module.exports = { start, app, 坐席选项, 席档名, 会话档于, 会话档 };
 
 // 直接 node server.js 跑时照常起（壳里走 start()，不重复挂）
 if (require.main === module) start().catch((e) => { console.error('起不来：', e.message); process.exit(1); });

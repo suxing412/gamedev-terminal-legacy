@@ -35,6 +35,23 @@ let 闸表 = [];
 // ---- 左栏：人闸（单据级 + 机制级两组）----
 // 两组都是「等你拍板」，但性质不同：单据级有单号有停摆时长，机制级是政策决定，没有单也没有钟。
 // 分组不分栏——它们竞争的是同一件东西：你的一次判断。
+//
+// 2026-08-31 重做。实测这一栏摊着 61 个按钮（36 单 + 25 机制），一个 340px 宽的
+// 常驻栏要滚将近四千像素才能看完——**它已经不是队列，是一堵墙**。两处实测：
+//   ① 36 单里 36 单都逾期（阈 24h，中位 129h）。三档染色全落在最深那档，
+//      于是"染色"表达的信息量正好是零：全红等于没红。
+//   ② 同一闸位的 24 单，动作键完全相同（G3 全是"验收：通过归档／打回"）。
+//      把它们摊成 24 个独立条目，是把**一次批量处置**误报成了 24 个待决定。
+// 所以按闸位分组（单据）、按型分组（机制），组头讲这一组的动作与形状，
+// 组可折叠且记住折叠态。数据没变，改的是它自称有多少件事。
+// 分堆与折叠规则都在 public/闸分组.js（判据要 require 它，所以它们不能长在这个文件里）
+const { 久档, 分闸组, 该收 } = self.闸分组;
+const 闸折键 = 'gt.闸折态';
+function 读折() { try { const o = JSON.parse(localStorage.getItem(闸折键) || '{}'); return new Map(Object.entries(o)); } catch { return new Map(); } }
+function 写折(m) { try { localStorage.setItem(闸折键, JSON.stringify(Object.fromEntries(m))); } catch { /* 隐私模式写不进，不值得为它报错 */ } }
+let 折态 = 读折();
+let 闸筛 = '全';
+
 async function 拉人闸() {
   const [g, a] = await Promise.all([
     fetch('/api/gates').then((x) => x.json()).catch(() => ({ 读不到: true, 因: '坐席后端不通' })),
@@ -50,35 +67,71 @@ async function 拉人闸() {
   $('闸数').textContent = g.读不到 ? '读不到' : `${单.length} 单 · ${机.length} 机制`;
   $('顶闸').textContent = 总;
 
+  const 阈 = g.逾期阈值小时 || 24;
   const 段 = [];
+
+  // 概览兼筛选。既然要在栏头说"多少件"，就让这句话同时能点——
+  // 多一行 chip 换掉一个独立筛选面板，340px 宽的栏付得起这个价。
+  if (!g.读不到 && (单.length + 机.length) > 8) {
+    const chip = (k, 名, n) => `<button class="闸筛钮${闸筛 === k ? ' 选中' : ''}" data-筛="${k}"${n ? '' : ' disabled'} aria-pressed="${闸筛 === k}">${名}<b>${n}</b></button>`;
+    段.push(`<div class="闸筛" role="group" aria-label="按类型筛选">
+      ${chip('全', '全部', 单.length + 机.length)}${chip('单', '单据', 单.length)}${chip('机', '机制', 机.length)}
+    </div>`);
+  }
+
+  // 一组的壳：组头（可折叠、报动作与形状）+ 组身。
+  // 组头两行：第一行是身份（名 + 计数），第二行是**这一组要你做什么、烂到什么程度**。
+  // 挤成一行量过——300px 宽的栏里名被截 46px、注被截 74px，
+  // 而注那句正是这次分堆新增的全部价值，截掉了等于没做。
+  const 画组 = (键, 名, 计, 注, 项们, 齐) => {
+    const 收 = 该收(折态, 键, 计, 闸筛);
+    return `<div class="闸组${齐 ? ' 齐久' : ''}">
+      <button class="组头 可折" data-组="${esc(键)}" aria-expanded="${!收}" aria-controls="组身-${esc(键)}">
+        <span class="头1">
+          <span class="折箭" aria-hidden="true">${收 ? '▸' : '▾'}</span>
+          <span class="组名">${esc(名)}</span><b>${计}</b>
+        </span>
+        <span class="组注">${注}</span>
+      </button>
+      <div class="组身" id="组身-${esc(键)}"${收 ? ' hidden' : ''}>${项们.join('')}</div>
+    </div>`;
+  };
+
+  const 画单 = (d, i) => {
+    const h = Number(d.停摆小时) || 0;
+    const 档 = 久档(h, 阈);
+    return `<button class="闸${档 ? ' 久' + 档 : ''}" data-i="${i}" title="${esc(d.闸名 + ' · ' + (d.指引 || d.按钮 || ''))}">
+      <span class="行1"><span class="号">${esc(d.id)}</span><span class="久">${时长文(h)}</span></span>
+      <span class="题">${esc(d.title || '')}</span>
+    </button>`;
+  };
+
   if (g.读不到) {
     段.push(`<div class="读不到">读不到监制台（${esc(g.因)}）<br>这一栏现在不可信，别拿它当"没事"。</div>`);
   } else if (!单.length) {
-    段.push('<div class="组头">单据</div><div class="空态"><b>没有等你签的单</b>单据级人闸清空。</div>');
-  } else {
-    const 阈 = g.逾期阈值小时 || 24;
-    段.push(`<div class="组头">单据 <b>${单.length}</b></div>`);
-    段.push(单.map((d, i) => {
-      const h = Number(d.停摆小时) || 0;
-      const 级 = h >= 阈 * 3 ? ' 久2' : h >= 阈 ? ' 久1' : '';
-      return `<button class="闸${级}" data-i="${i}" title="${esc(d.闸名 + ' · ' + (d.按钮 || ''))}">
-        <span class="行1"><span class="号">${esc(d.id)}</span><span class="久">${时长文(h)}</span></span>
-        <span class="题">${esc(d.title || '')}</span>
-        <span class="谁">${esc(d.闸号)} ${esc(d.闸名)}</span>
-      </button>`;
-    }).join(''));
+    段.push('<div class="组头 静">单据</div><div class="空态"><b>没有等你签的单</b>单据级人闸清空。</div>');
   }
 
-  if (a.读不到) {
-    段.push(`<div class="组头">机制</div><div class="读不到">读不到议程档（${esc(a.因)}）</div>`);
-  } else if (机.length) {
-    段.push(`<div class="组头">机制 <b>${机.length}</b><span>政策决定 · 读自议程档</span></div>`);
-    段.push(机.map((d, i) => `<button class="闸 机" data-i="${单.length + i}" title="${esc(d.说明).slice(0, 300)}">
-      <span class="行1"><span class="号">第 ${d.号} 条</span><span class="久">${esc(d.型名)}</span></span>
-      <span class="题">${esc(d.题)}</span>
-      <span class="谁">${esc(d.节)}</span>
-    </button>`).join(''));
+  // 单据按闸位分（同闸位动作键相同 ⇒ 一次批量处置），机制按型分（型 = 这个决定要花多少脑子）。
+  // 一次调用同时分两类，下标就只有一套——两次调用各算各的偏移量，
+  // 是"带单带错一条"这类错的经典产地。
+  if (!g.读不到 && (单.length || 机.length)) {
+    for (const z of 分闸组(单, a.读不到 ? [] : 机, 阈, 闸筛)) {
+      if (z.类 === '单') {
+        const s = z.形;
+        const 注 = `${z.动 ? esc(z.动) + ' · ' : ''}${s.逾期 === s.总 ? '全部逾期' : `${s.逾期} 逾期`}，最久 ${时长文(s.最久)}`;
+        段.push(画组(z.键, z.名, z.计, 注, z.项.map((p) => 画单(p.d, p.i)), z.齐));
+      } else {
+        段.push(画组(z.键, z.名, z.计, `跨 ${z.节数} 节 · 读自议程档`, z.项.map(({ d, i }) => `<button class="闸 机" data-i="${i}" title="${esc(d.说明).slice(0, 300)}">
+          <span class="行1"><span class="号">第 ${d.号} 条</span></span>
+          <span class="题">${esc(d.题)}</span>
+          <span class="谁">${esc(d.节)}</span>
+        </button>`), false));
+      }
+    }
   }
+
+  if (a.读不到) 段.push(`<div class="组头 静">机制</div><div class="读不到">读不到议程档（${esc(a.因)}）</div>`);
   若变('闸', 列, 段.join(''));
 }
 
@@ -213,7 +266,9 @@ async function 说(话) {
   const 全 = 带的单 ? `关于 ${带的单}：${话}` : 话;
   加话('你', 全, '我');
   收带();
-  const 格 = 加话('总监', '');
+  // 私聊时答话的是那一席，不是总监。原来无论点了谁，回答都顶着「总监」的名字——
+  // 而屏上同时亮着「私聊 情报主管」，两句话互相打脸。
+  const 格 = 加话(私聊席 || '总监', '');
   const 忙 = (文) => { 格.innerHTML = ''; const s = document.createElement('span'); s.className = '在跑'; s.innerHTML = '<i></i>'; s.append(文); 格.append(s); };
   忙('思考中…');
 
@@ -221,8 +276,20 @@ async function 说(话) {
   try {
     const res = await fetch('/api/say', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 话: 全 }),
+      // 席 必须发出去。**不发就只是换了个皮**：2026-08-31 巡礼查出，
+      // 私聊席 从头到尾只活在前端，服务端收到的每一条都走同一个会话、同一个人设，
+      // 而说区底下那句「这条线有自己的记忆」是照设计稿写的，一个字都没兑现。
+      body: JSON.stringify(私聊席 ? { 话: 全, 席: 私聊席 } : { 话: 全 }),
     });
+    // 服务端把「参数不对」答成 400+JSON，不是 SSE。不先拦一道的话，
+    // 下面那个 SSE 解析器会把整段 JSON 当成认不出的流块丢掉，
+    // 屏上只剩一句「（无输出）」——**报错被解析器吃掉，是最难查的那一类**。
+    if (!res.ok) {
+      let 因 = `HTTP ${res.status}`;
+      try { const j = await res.json(); if (j && j.error) 因 = j.error; } catch { /* 不是 JSON 就用状态码 */ }
+      格.textContent = '（' + 因 + '）';
+      return;
+    }
     const rd = res.body.getReader(); const 解 = new TextDecoder();
     let 残 = '';
     for (;;) {
@@ -261,6 +328,21 @@ function 收带() { 带的单 = null; $('带').classList.remove('显'); }
 
 // ---- 接线 ----
 $('闸列').addEventListener('click', (e) => {
+  const 头 = e.target.closest('.组头.可折');
+  if (头) {
+    // 当场翻，不等下一轮轮询——折叠是"我现在不想看这一堆"，
+    // 让它等两秒才收起来，就等于每次都要怀疑自己有没有点上。
+    const 键 = 头.dataset.组;
+    const 收 = 头.getAttribute('aria-expanded') === 'true';   // 翻的是屏上此刻的样子，不是默认值
+    折态.set(键, 收);
+    写折(折态);
+    头.setAttribute('aria-expanded', String(!收));
+    头.querySelector('.折箭').textContent = 收 ? '▸' : '▾';
+    const 身 = 头.parentElement.querySelector('.组身'); if (身) 身.hidden = 收;
+    return;
+  }
+  const 筛钮 = e.target.closest('.闸筛钮');
+  if (筛钮) { 闸筛 = 筛钮.dataset.筛; 拉人闸(); return; }
   const b = e.target.closest('.闸'); if (b) 上带(Number(b.dataset.i));
 });
 $('带撤').addEventListener('click', 收带);
@@ -279,7 +361,14 @@ document.addEventListener('keydown', (e) => {
   if (e.target === 框) { if (e.key === 'Escape') { 框.value = ''; 框.blur(); } return; }
   if (e.key === '/') { e.preventDefault(); 框.focus(); }
   else if (e.key === 'F9') { e.preventDefault(); 换形态(!document.querySelector('.台').classList.contains('塔')); }
-  else if (e.key >= '1' && e.key <= '9') 上带(Number(e.key) - 1);
+  // 数字键选的是**看得见的**第 N 条，不是 闸表 的第 N 项。
+  // 分组折叠之后这两者会分家：折起来的那些还在 闸表 里，按 2 却带上一条屏幕上根本没有的单，
+  // 就成了"点了有反应、但反应的不是你指的那个"——比没反应更难查。
+  else if (e.key >= '1' && e.key <= '9') {
+    const 见 = [...$('闸列').querySelectorAll('.闸')].filter((x) => x.offsetParent !== null);
+    const 目 = 见[Number(e.key) - 1];
+    if (目) 上带(Number(目.dataset.i));
+  }
 });
 
 // ---- 凭据与额度 ----
@@ -333,6 +422,9 @@ const 走钟 = () => { $('顶钟').textContent = new Date().toTimeString().slice
 // 名单只有一处事实源：server/lib/坐席.js，经 /api/seats 下发。
 // 前端**不许自己写死一份**——那正是坐席.js 头注要避免的三处各存一份。
 let 私聊席 = null;
+let 席况 = new Map();   // 名 → 接模型，点击时要用它判断这一位说不说得了话
+
+const 群说注 = 'Enter 发送 · Shift+Enter 换行 · @ 点名 · 数字键 1-9 选左栏';
 
 async function 拉在座() {
   const 组 = $('座组');
@@ -342,21 +434,24 @@ async function 拉在座() {
   catch { 组.innerHTML = '<span class="座读不到">坐席名单读不到</span>'; return; }   // 说读不到，不编
   const 席 = (r && r.席) || [];
   if (!席.length) { 组.innerHTML = '<span class="座读不到">名单为空 —— 不是零席，是没配</span>'; return; }
+  席况 = new Map(席.map((x) => [x.名, !!x.接模型]));
   组.innerHTML = ['制作人'].concat(席.map((x) => x.名)).map((名) => {
     const s = 席.find((x) => x.名 === 名);
     const 未接 = s && !s.接模型;
     const 选 = 私聊席 === 名;
-    return `<button class="座${选 ? ' 选' : ''}${未接 ? ' 未接' : ''}" data-seat="${名}"`
-      + (名 === '制作人' ? ' disabled' : '') + `>`
-      + `<i class="座灯"></i>${名}${未接 ? '<em>未接</em>' : ''}</button>`;
+    // 未接的席位不 disabled：**disabled 的按钮点了完全没有反应**，
+    // 而"点了没反应"正是这轮巡礼在到处抓的那种病。它照常接点击，
+    // 只是回答"我还没接模型"——名单里有它是事实，它说不了话也是事实，两句都要说出口。
+    return `<button class="座${选 ? ' 选' : ''}${未接 ? ' 未接' : ''}" data-seat="${esc(名)}"`
+      + (名 === '制作人' ? ' disabled' : '')
+      + (未接 ? ` title="${esc(名)}已登记但还没接模型，开不了私聊"` : '')
+      + `>`
+      + `<i class="座灯"></i>${esc(名)}${未接 ? '<em>未接</em>' : ''}</button>`;
   }).join('');
 }
 
-$('座组') && $('座组').addEventListener('click', (e) => {
-  const b = e.target.closest('.座');
-  if (!b || b.disabled) return;
-  const 名 = b.dataset.seat;
-  私聊席 = (私聊席 === 名) ? null : 名;          // 再点一次＝回群
+function 换私聊(名) {
+  私聊席 = 名;
   document.querySelector('.台').classList.toggle('私聊中', !!私聊席);
   const 框 = $('说框');
   框.placeholder = 私聊席
@@ -364,9 +459,26 @@ $('座组') && $('座组').addEventListener('click', (e) => {
     : '说点什么…（@ 点名某席，不点名则相关席应答）';
   $('说注').textContent = 私聊席
     ? `私聊 ${私聊席} · 这条线有自己的记忆，与群里那条各记各的`
-    : 'Enter 发送 · Shift+Enter 换行 · @ 点名 · 数字键 1-9 选左栏';
+    : 群说注;
   拉在座();
   框.focus();
+}
+
+$('座组') && $('座组').addEventListener('click', (e) => {
+  const b = e.target.closest('.座');
+  if (!b || b.disabled) return;
+  const 名 = b.dataset.seat;
+  // 未接模型的席位：**回答，而不是照常切进去**。
+  // 原来点它一样进私聊态——顶边亮起、占位符改成「只有情报主管看得见」、
+  // 底下写着「这条线有自己的记忆」，然后说一句话，答的还是总监。
+  // 三句话里没有一句是真的。
+  if (席况.has(名) && !席况.get(名)) {
+    if (私聊席) 换私聊(null);            // 从别人的私聊里点过来，先老实回群
+    $('说注').textContent = `${名} 还没接模型 —— 名单里有它，但它说不了话。私聊只对已接模型的席开着。`;
+    b.classList.add('拒'); setTimeout(() => b.classList.remove('拒'), 900);
+    return;
+  }
+  换私聊(私聊席 === 名 ? null : 名);      // 再点一次＝回群
 });
 
 拉人闸(); 拉脉搏(); 拉近事(); 拉凭据(); 拉额度(); 拉在座();

@@ -36,6 +36,74 @@
   上名单();
   document.addEventListener('视图装好', 上名单);
 
+  // ── 按发言人筛 ────────────────────────────────────────────
+  //
+  // 左栏那份「谁说了多少条」原来是 `<li>`，`cursor:auto`，前端只绑了 `.cz-i .more`
+  // ——**摆在旁边的一份清单，点它没有任何反应**。那是这一夜反复在抓的那种
+  // 「静止的活人」：看着能点，其实什么都没接。
+  //
+  // 只在前端筛（条目已经在页面上了，没必要来回一趟），再点一次取消。
+  let 筛谁 = null;
+  function 应用谁() {
+    const 条 = [...document.querySelectorAll('.cz-i')];
+    let 见 = 0;
+    for (const li of 条) {
+      const who = (li.querySelector('.who') || {}).textContent;
+      const 中 = !筛谁 || String(who || '').trim() === 筛谁;
+      li.hidden = !中;
+      if (中) 见++;
+    }
+    for (const b of document.querySelectorAll('.cz-seat[data-who]')) {
+      const 开 = b.dataset.who === 筛谁;
+      b.setAttribute('aria-pressed', String(开));
+      b.classList.toggle('开', 开);
+    }
+    const 条栏 = document.querySelector('.cz-bar .n');
+    if (条栏) {
+      if (!条栏.dataset.原) 条栏.dataset.原 = 条栏.textContent;
+      // **说清这一屏是按谁筛出来的**，也说清这只是本页已加载的那些——
+      // 「向上加载更早」还没点过时，筛出来的数小于那个人的总条数。
+      条栏.textContent = 筛谁
+        ? `只看 ${筛谁}：本页 ${见} 条（点一下取消）`
+        : 条栏.dataset.原;
+    }
+  }
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('.cz-seat[data-who]');
+    if (!b) return;
+    筛谁 = (筛谁 === b.dataset.who) ? null : b.dataset.who;
+    应用谁();
+  });
+
+  // ── 跳到最新 ──────────────────────────────────────────────
+  //
+  // 开屏 scrollY=0，而第一条是六天前的、最新那条在一万四千像素之下，
+  // 且没有任何一条路直接过去。**这一页的默认问题是「最近说了什么」。**
+  // 不自动滚（那会把「向上加载更早」的位置也搅乱），给一颗钮。
+  function 挂跳新() {
+    const 钮 = $('czNew');
+    const 列 = $('czList');
+    if (!钮 || !列) return;
+    // 滚的是**离它最近的那个能滚的祖先**：独立打开时是页面，
+    // 被抠成片段塞进主页时是 .视图区。写死 window 的话在壳里一动不动。
+    const 找滚 = (el) => {
+      for (let n = el.parentElement; n; n = n.parentElement) {
+        const st = getComputedStyle(n).overflowY;
+        if ((st === 'auto' || st === 'scroll') && n.scrollHeight > n.clientHeight + 4) return n;
+      }
+      return null;
+    };
+    const 到底 = () => {
+      const 容 = 找滚(列);
+      if (容) 容.scrollTop = 容.scrollHeight;
+      else window.scrollTo({ top: document.body.scrollHeight });
+    };
+    钮.hidden = false;
+    钮.onclick = 到底;
+  }
+  挂跳新();
+  document.addEventListener('视图装好', 挂跳新);
+
   // ── 展开全文：折叠只管视觉高度，判不判折是服务端按逻辑行定的 ──
   document.addEventListener('click', (e) => {
     const b = e.target.closest('.cz-i .more');

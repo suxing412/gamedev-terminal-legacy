@@ -221,3 +221,54 @@ test('真数据：325 条读全、零坏行、ID 零碰撞', () => {
   assert.equal(ids.size, r.条.length, 'ID 全量零碰撞');
   assert.ok(r.播报数 > 100 && r.播报数 < 130, '实测 115 条播报，量级对得上：' + r.播报数);
 });
+
+// ── 席间存照四件（2026-08-31 内部评审 S14）────────────────────────
+
+test('S14三 · **时刻是本地时，不是 UTC**（真实 18:12 显示成 10:12，整页偏八小时）', () => {
+  const { 渲染条 } = require('../server/routes/存照');
+  // 挑一个「本地与 UTC 一定不同日或不同时」的时刻，用本地构造再转 ISO
+  const d = new Date(2026, 7, 29, 18, 12);
+  const h = 渲染条({ id: 'x', from: '总监', text: '一句话', t: d.toISOString(), 行数: 1 });
+  const p2 = (n) => String(n).padStart(2, '0');
+  const 期 = `${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+  assert.ok(h.includes(期), `时刻不是本地时：期望含「${期}」，实得 ${h.slice(0, 160)}`);
+  if (new Date().getTimezoneOffset() !== 0) {
+    const U = d.toISOString().replace('T', ' ').slice(5, 16);
+    assert.ok(!h.includes(U), `画的是 UTC 那个钟面（${U}）—— 它就并排在顶栏那个本地钟旁边`);
+  }
+});
+
+test('S14三b 时刻解不开时照原样给，不编一个出来', () => {
+  const { 渲染条 } = require('../server/routes/存照');
+  const h = 渲染条({ id: 'x', from: '总监', text: 'y', t: '这不是时刻', 行数: 1 });
+  assert.ok(h.includes('这不是时刻'), '解不开的时刻被换成了一个编出来的钟面：' + h.slice(0, 140));
+});
+
+test('S14四 · **「写了一半」与「三天没人说话」是两件事**', () => {
+  const 现在 = Date.parse('2026-09-01T03:00:00.000Z');
+  // 刚说过话 → 不报
+  assert.strictEqual(存照.静默多久({ t: '2026-09-01T02:00:00.000Z' }, 现在), null);
+  // 十三小时前 → 报小时
+  const a = 存照.静默多久({ t: '2026-08-31T14:00:00.000Z' }, 现在);
+  assert.ok(a && /小时/.test(a.说), '十三小时的静默没报出来：' + JSON.stringify(a));
+  // 三天前 → 报天
+  const b = 存照.静默多久({ t: '2026-08-29T03:00:00.000Z' }, 现在);
+  assert.ok(b && /3 天/.test(b.说), '三天的静默没报成「天」：' + JSON.stringify(b));
+  // 没有末条 / 时刻坏了 → null，不许编
+  assert.strictEqual(存照.静默多久(null, 现在), null);
+  assert.strictEqual(存照.静默多久({ t: '坏的' }, 现在), null);
+  // 阈值可调，但默认必须够宽（这条线本来就不是每小时都有人说话）
+  assert.strictEqual(存照.静默多久({ t: '2026-09-01T00:00:00.000Z' }, 现在), null, '三小时就报，等于噪声');
+});
+
+test('S14一二 · 跳到最新钮与可点的发言人（原来一个不存在、一个点了没反应）', () => {
+  const 源 = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', '存照.js'), 'utf8');
+  assert.match(源, /id="czNew"/, '没有「跳到最新」——开屏落在六天前那条上，最新的在一万四千像素之下');
+  assert.match(源, /button type="button" class="cz-seat" data-who=/,
+    '发言人还是 <li>：一份摆在旁边的清单，点它没有任何反应');
+  const 前 = fs.readFileSync(path.join(__dirname, '..', 'public', '存照.js'), 'utf8');
+  assert.match(前, /\.cz-seat\[data-who\]/, '前端没接发言人筛');
+  assert.match(前, /czNew/, '前端没接跳到最新');
+  // **滚的是最近的可滚祖先，不是 window**——片段模式下滚 window 一动不动
+  assert.match(前, /overflowY/, '跳到最新写死了 window，壳内（片段塞进 .视图区）不会动');
+});

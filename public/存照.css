@@ -29,6 +29,32 @@
 .cz-seat .n { font-size: 12.5px; color: var(--ink); font-weight: 500; }
 .cz-seat.off .n { color: var(--ink-3); font-weight: 400; }
 .cz-seat .c { font: 400 11px var(--mono); color: var(--ink-3); }
+/* 上面那份「说过话的」是**按钮**（点了按发言人筛），下面那份「名单上的坐席」是 li。
+   两者长得一样是故意的——它们是同一种东西的两个来源；但能点的那份要有能点的样子。 */
+button.cz-seat {
+  width: 100%; text-align: left; border: 0; font: inherit; cursor: pointer;
+  transition: background 140ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+button.cz-seat:hover { background: var(--raised); }
+button.cz-seat:focus-visible { outline: 2px solid var(--gate); outline-offset: -2px; }
+button.cz-seat.开 { background: var(--gate-wash); }
+button.cz-seat.开 .n { color: var(--gate); }
+.cz-seats li { display: contents; }   /* li 只做容器，格子交给里面那颗按钮 */
+
+/* 跳到最新。**开屏落在最旧那条上**是这一页原来的样子：第一条是六天前的，
+   最新那条在一万四千像素之下，而没有任何一条路直接过去。
+   浮在右下角，不占版面；这一页是查档不是值班屏，一颗钮够了。 */
+.cz-new {
+  position: sticky; bottom: var(--s4); float: right;
+  margin-top: calc(-1 * var(--s5));
+  padding: 6px 12px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--panel);
+  color: var(--ink-2); font: inherit; font-size: 12px; cursor: pointer;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 0.35);
+}
+.cz-new:hover { border-color: var(--gate); color: var(--ink); }
+.cz-new:focus-visible { outline: 2px solid var(--gate); outline-offset: 2px; }
+.cz-new[hidden] { display: none; }
 .cz-seats .hint { padding: var(--s2) var(--s3); background: var(--panel); color: var(--ink-3); font-size: 12px; }
 .cz-note { margin-top: var(--s3); color: var(--ink-3); font-size: 11px; line-height: 1.65; }
 

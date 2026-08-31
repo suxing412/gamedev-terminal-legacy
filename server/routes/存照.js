@@ -20,7 +20,17 @@ function 线程路径(数据根) {
   return path.join(数据根, '遥控', 'thread.jsonl');
 }
 
-const 时刻 = (t) => String(t || '').replace('T', ' ').slice(5, 16);
+// **本地时刻，不是 UTC。**
+// 原来是对 ISO 串直接切片（`replace('T',' ').slice(5,16)`）——那切出来的是 UTC：
+// 真实 18:12 显示成 10:12，整页偏八小时，而它就并排在顶栏那个本地钟旁边。
+// 同一族的病这一夜修了四处：/api/events 的月、事件行的日期、监视页的「取于」、这里。
+// 它们都是「拿一个 ISO 串当人看的钟面用」。
+const p2 = (n) => String(n).padStart(2, '0');
+const 时刻 = (t) => {
+  const d = new Date(t);
+  if (Number.isNaN(d.getTime())) return String(t || '').slice(0, 16);   // 解不开就照原样，不编
+  return `${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+};
 
 function 渲染条(x, o = {}) {
   const 折 = x.播报 && !o.展开播报;
@@ -54,6 +64,7 @@ function 挂(app, opts = {}) {
       if (末行印 !== 印) { 末行印 = 印; 末行首见 = 现在; }
     } else { 末行印 = null; 末行首见 = null; }
     s.末行陈旧 = 存照.末行陈旧(末行首见 ? { 首见: 末行首见 } : null, 现在);
+    s.静默 = 存照.静默多久((s.条 || [])[(s.条 || []).length - 1], 现在);
     return s;
   };
 
@@ -76,12 +87,21 @@ function 挂(app, opts = {}) {
       if (s.坏行) 警.push(`坏行 ${s.坏行} 条（写坏了，已计数未吞）`);
       if (s.结构坏行) 警.push(`结构坏行 ${s.结构坏行} 条（合法 JSON 但形状不对）`);
       if (s.末行陈旧) 警.push(`末条记录未写完（已 ${s.末行陈旧.分钟} 分钟）—— 写方可能崩了`);
+      // **「末条写了一半」与「末条写完了但已经三天没人说话」是两件事。**
+      // 原来只报前者（JSON 未闭合），于是线程静默三天时这一页看起来一切正常：
+      // 有内容、有计数、没有警告。而「这条线还活着没有」正是打开这一页要问的。
+      if (s.静默) 警.push(`最后一条是 ${s.静默.说}前的 —— 这条线可能已经停了`);
       body = `<div class="cz-wrap">
         <aside class="cz-side">
           <h2>说过话的</h2>
-          <ul class="cz-seats">${(s.发言人 || []).map((v) => `<li class="cz-seat">
-            <i></i><span class="n">${转义(v.名)}</span>
-            <span class="c">${v.条} 条${v.播报 ? ' · 播报 ' + v.播报 : ''}</span></li>`).join('')}</ul>
+          <!-- **这三个数原来点不动**（cursor:auto，前端只绑了 .cz-i .more）。
+               一份「谁说了多少条」的清单摆在旁边，而点它没有任何反应——
+               那是这一夜反复在抓的那种「静止的活人」。改成按钮做前端过滤。 -->
+          <ul class="cz-seats">${(s.发言人 || []).map((v) => `<li>
+            <button type="button" class="cz-seat" data-who="${转义(v.名)}" aria-pressed="false">
+              <i></i><span class="n">${转义(v.名)}</span>
+              <span class="c">${v.条} 条${v.播报 ? ' · 播报 ' + v.播报 : ''}</span>
+            </button></li>`).join('')}</ul>
           <h2 class="cz-h2b">名单上的坐席</h2>
           <ul class="cz-seats" id="czSeats"><li class="hint">读取中…</li></ul>
           <p class="cz-note">名单与实际说话的人**是两套名字空间**：线程里说话的是上面那几位，
@@ -95,7 +115,11 @@ function 挂(app, opts = {}) {
           </div>
           ${警.length ? `<p class="cz-warn">${警.map(转义).join(' · ')}</p>` : ''}
           ${s.还有更早 ? `<a class="cz-more" href="/chat?beforeLine=${s.条[0].行序}${展开 ? '&播报=1' : ''}">向上加载更早（还有 ${s.条[0].行序 - 1} 行）</a>` : ''}
-          <ul class="cz-list">${s.条.map((x) => 渲染条(x, { 展开播报: 展开 })).join('')}</ul>
+          <ul class="cz-list" id="czList">${s.条.map((x) => 渲染条(x, { 展开播报: 展开 })).join('')}</ul>
+          <!-- **开屏落在最旧那条上**是这一页原来的样子：第一条是六天前的，
+               最新那条在 14000px 之下，而没有任何一条路直接过去。
+               这一页的默认问题是「最近说了什么」，不是「六天前说了什么」。 -->
+          <button type="button" class="cz-new" id="czNew" hidden>↓ 跳到最新</button>
         </section>
       </div>`;
     }

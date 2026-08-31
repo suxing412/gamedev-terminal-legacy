@@ -198,7 +198,7 @@ body, .视图 {
   .wbtn { transition: none; }
 }
 
-@media (max-width: 900px) {
+@container 视 (max-width: 900px) {
   .wrap { padding: var(--s5) var(--s4); }
   .wev-i { grid-template-columns: 54px minmax(0, 1fr); }
   .wev-i .src { display: none; }

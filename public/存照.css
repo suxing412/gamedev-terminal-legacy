@@ -98,7 +98,7 @@
 .cz-err .hint { color: var(--ink-3); }
 .cz-err code { font: 400 12.5px var(--mono); color: var(--ink-2); }
 
-@media (max-width: 900px) {
+@container 视 (max-width: 900px) {
   .cz-wrap { grid-template-columns: 1fr; }
   .cz-i.fold { grid-template-columns: 54px minmax(0, 1fr); }
   .cz-i.fold time { display: none; }

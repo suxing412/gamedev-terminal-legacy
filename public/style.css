@@ -293,6 +293,37 @@ body {
 .事 span { color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .事.重 span { color: var(--ink); }
 
+/* 折起来的重复事件。**次数用等宽数字**，因为它会跳（×19 → ×20），
+   不等宽的话每跳一次整行都要抖一下，而这一栏整天在屏上。 */
+.事.折 span { color: var(--ink-3); }
+.事计 {
+  flex: none;
+  font: 500 10.5px var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+  background: var(--raised);
+  border-radius: 3px;
+  padding: 0 4px;
+  align-self: flex-start;
+}
+.事跨 {
+  flex: none;
+  font: 400 10px var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+  align-self: flex-start;
+  opacity: .8;
+}
+/* 折起来的行整体压一档：它讲的是「这段时间没出事」，
+   不该和真正发生了什么的那几行抢同样的视觉重量。 */
+.事.折 { opacity: .78; }
+.事.折.重 { opacity: 1; }        /* 除非它折的是失败/三振那类——那种重复更要紧 */
+
+/* 空态。**「真的没事」与「读不到」是两件事**，在值班屏上绝不能混：
+   前者是好消息，后者是故障。所以它们长得不一样、颜色也不一样。 */
+.事空 { padding: var(--s4); color: var(--ink-3); font-size: 11.5px; line-height: 1.6; }
+.事空 span { display: block; color: var(--ink-3); opacity: .7; margin-top: 2px; }
+
 .读不到 { padding: var(--s4); color: var(--gate-deep); font-size: 12px; line-height: 1.5; }
 
 /* 滚动条：细、低对比，不参与视觉 */

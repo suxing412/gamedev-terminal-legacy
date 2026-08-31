@@ -182,7 +182,7 @@ a.si .si-n { text-decoration: underline; text-decoration-color: var(--line); }
 .unk { color: var(--ink-3); font-style: normal; font-family: var(--sans); font-size: 12px; }
 .hint { color: var(--ink-3); font-size: 13.5px; }
 
-@media (max-width: 900px) {
+@container 视 (max-width: 900px) {
   .si { flex: 1 1 100%; border-right: 0; border-bottom: 1px solid var(--line-soft); }
   .now { flex: 1 1 100%; border-right: 0; border-bottom: 1px solid var(--line-soft); padding: var(--s2) var(--s4); }
   .srep { padding: var(--s4); }

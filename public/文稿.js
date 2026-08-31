@@ -32,21 +32,118 @@
     const 计 = $('#稿计');
     const 原计文 = 计 ? 计.textContent : '';
 
-    function 过滤(词) {
-      const q = String(词 || '').trim().toLowerCase();
+    // ── 筛选状态 ──
+    // 三条互相叠加：词 / 只看有记号 / 只看可写 / 只看某几类。
+    // **叠加而不是互斥**——「在办文稿里有记号的」是最常问的那一句，
+    // 而它需要两条同时成立。
+    const 筛 = { 词: '', 记号: false, 可写: false, 类: new Set() };
+
+    function 应用筛() {
+      const q = 筛.词;
       let 见 = 0;
       $$('.稿组', 台).forEach((组) => {
+        const 组类 = 组.getAttribute('data-类');
+        const 类过 = !筛.类.size || 筛.类.has(组类);
         let 组见 = 0;
         $$('.稿项', 组).forEach((a) => {
-          const 中 = !q || (a.getAttribute('data-路') || '').indexOf(q) >= 0;
+          const 中 = 类过
+            && (!q || (a.getAttribute('data-路') || '').indexOf(q) >= 0)
+            && (!筛.记号 || a.getAttribute('data-记') === '1')
+            && (!筛.可写 || a.getAttribute('data-可写') === '1');
           a.hidden = !中;
           if (中) { 见++; 组见++; }
         });
         组.classList.toggle('空', 组见 === 0);
-        if (q) 组.open = 组见 > 0;      // 搜时摊开命中的组
+        // 有筛选时摊开命中的组；筛选全清了就回到默认（只开在办）
+        if (q || 筛.记号 || 筛.可写 || 筛.类.size) 组.open = 组见 > 0;
       });
-      if (计) 计.textContent = q ? `${见} 份命中「${词}」` : 原计文;
+      const 清 = document.getElementById('筛清');
+      const 有筛 = !!(q || 筛.记号 || 筛.可写 || 筛.类.size);
+      if (清) 清.hidden = !有筛;
+      if (计) {
+        计.textContent = 有筛
+          ? `${见} 份命中${说筛()}`
+          : 原计文;
+      }
+      // **筛完为空要有话说。**只把组藏起来的话，屏上是一片空白——
+      // 而空白在值班屏上永远读作「它坏了」，不是「没有命中」。
+      // （这一条是自己刚做出来的洞：加了筛选却没加筛空的出口。）
+      const 列 = document.getElementById('稿列');
+      let 空条 = 列 && 列.querySelector('.稿筛空');
+      if (见 === 0 && 有筛) {
+        if (!空条 && 列) {
+          空条 = document.createElement('div');
+          空条.className = '稿筛空';
+          列.appendChild(空条);
+        }
+        if (空条) {
+          空条.innerHTML = `<b>没有文档命中这组筛选</b>`
+            + `<p>当前条件${说筛().replace(/^：/, '：')}</p>`
+            + `<button type="button" class="筛钮 清" data-清>清掉筛选</button>`;
+          空条.hidden = false;
+        }
+      } else if (空条) {
+        空条.hidden = true;
+      }
       return 见;
+    }
+
+    function 说筛() {
+      const 条 = [];
+      if (筛.词) 条.push(`「${筛.词}」`);
+      if (筛.记号) 条.push('有记号');
+      if (筛.可写) 条.push('可写');
+      if (筛.类.size) 条.push(`${筛.类.size} 类`);
+      return 条.length ? '：' + 条.join(' · ') : '';
+    }
+
+    const 过滤 = (词) => { 筛.词 = String(词 || '').trim().toLowerCase(); return 应用筛(); };
+
+    // 三个开关钮
+    const 挂钮 = (id, 键) => {
+      const b = document.getElementById(id);
+      if (!b || b.disabled) return;
+      b.addEventListener('click', () => {
+        筛[键] = !筛[键];
+        b.classList.toggle('开', 筛[键]);
+        应用筛();
+      });
+    };
+    挂钮('筛记号', '记号');
+    挂钮('筛可写', '可写');
+
+    const 类栏 = document.getElementById('类筛');
+    if (类栏) {
+      类栏.addEventListener('click', (e) => {
+        const b = e.target.closest('.类筛钮');
+        if (!b) return;
+        const k = b.getAttribute('data-类');
+        if (筛.类.has(k)) 筛.类.delete(k); else 筛.类.add(k);
+        b.classList.toggle('开', 筛.类.has(k));
+        应用筛();
+      });
+    }
+
+    function 清筛() {
+      筛.词 = ''; 筛.记号 = false; 筛.可写 = false; 筛.类.clear();
+      if (框) 框.value = '';
+      $$('.筛钮, .类筛钮', 台).forEach((b) => b.classList.remove('开'));
+      $$('.稿项', 台).forEach((a) => { a.hidden = false; });
+      $$('.稿组', 台).forEach((g) => {
+        g.classList.remove('空');
+        g.open = g.getAttribute('data-类') === 'zaiban';   // 回默认：只开在办
+      });
+      if (计) 计.textContent = 原计文;
+      const c = document.getElementById('筛清'); if (c) c.hidden = true;
+      const e = 台.querySelector('.稿筛空'); if (e) e.hidden = true;
+    }
+    // 两个入口共用一条出路：筛选栏上那个「清筛选」，与筛空态里那个「清掉筛选」。
+    // 委托到 .稿库 上，因为筛空态那个按钮是后来才插进 DOM 的。
+    const 库 = 台.querySelector('.稿库');
+    if (库) {
+      库.addEventListener('click', (e) => {
+        if (e.target.closest('#筛清') || e.target.closest('[data-清]')) 清筛();
+      });
     }
 
     function 只留(集, q) {

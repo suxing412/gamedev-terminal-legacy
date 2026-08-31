@@ -50,34 +50,76 @@ const 字节文 = (n) => (n < 1024 ? `${n}B`
   : n < 1024 * 1024 ? `${(n / 1024).toFixed(0)}KB` : `${(n / 1048576).toFixed(1)}MB`);
 
 // ── 左栏：文件库 ───────────────────────────────────────────────────
+//
+// **按「这份东西是干什么的」分组，不按仓。**
+// 2026-08-31 晚制作人指着截图定的：「这种文档堆积不给我分类的情况不要出现」。
+// 按仓分只回答了「它属于哪个项目」——而那个问题他基本不问；
+// 实测语料里 454/951（48%）是工单留痕（机器一次性产出、只读、他不会打开），
+// 而他真正要来回改的那 50 份散在三个仓里，跟那 48% 排在同一条按时间倒序的流里抢位置。
+//
+// 分组之外还要**筛**：记号系统本来就是为「哪些文档在等我」设的，
+// 可如果不能一眼筛出有记号的，它就只在你已经打开那一份时才有用
+// ——等于只解决了一半。
 function 渲染库(列表, 当前) {
-  const 按根 = new Map();
-  for (const it of 列表) {
-    if (!按根.has(it.根)) 按根.set(it.根, { 名: it.根名, 项: [] });
-    按根.get(it.根).项.push(it);
-  }
+  const 有记数 = 列表.filter(文稿lib.有记号).length;
   const 可写数 = 列表.filter((x) => x.可写).length;
 
-  const 组 = [...按根.entries()].map(([键, g]) => {
-    // 改动时间新的在前——你最近碰过的东西最可能是你要找的
-    const 项 = g.项.slice().sort((a, b) => b.改于 - a.改于).map((it) => {
-      const 在 = 当前 && 当前.根 === it.根 && 当前.相对 === it.相对;
-      const 锁 = it.可写 ? '' : '<span class="稿只读" title="只读">只读</span>';
-      return `<a class="稿项${在 ? ' 在' : ''}" href="/doc?r=${encodeURIComponent(it.根)}&p=${encodeURIComponent(it.相对)}"`
-        + ` data-路="${转义((it.根 + '/' + it.相对).toLowerCase())}">`
-        + `<span class="稿名">${转义(it.相对)}</span>${锁}`
-        + `<span class="稿注">${字节文(it.字节)}</span></a>`;
-    }).join('\n');
-    const 开 = !当前 || 当前.根 === 键 ? ' open' : '';
-    return `<details class="稿组"${开}><summary>${转义(g.名)}<span class="稿数">${g.项.length}</span></summary>
+  // 按类别分桶，桶序即 类别表 的序（越靠前越可能是他此刻要找的）
+  const 桶 = new Map();
+  for (const c of 文稿lib.类别表) 桶.set(c.键, { ...c, 项: [] });
+  桶.set('qita', { 键: 'qita', 名: '其它', 释: '', 项: [] });
+  for (const it of 列表) (桶.get(it.类) || 桶.get('qita')).项.push(it);
+
+  const 记号色 = { 改: 'gai', 加: 'jia', 删: 'shan', 问: 'wen' };
+  const 条 = (it) => {
+    const 在 = 当前 && 当前.根 === it.根 && 当前.相对 === it.相对;
+    const 记 = it.记 && (it.记.改 + it.记.加 + it.记.删 + it.记.问) > 0
+      ? '<span class="稿记">' + 文稿lib.记号们.filter((k) => it.记[k])
+        .map((k) => `<i class="${记号色[k]}">${k}${it.记[k]}</i>`).join('') + '</span>'
+      : '';
+    // 目录只在**能区分**时才显示：同名文件靠它认，其余情况它是每行重复的噪声
+    const 处 = [it.根名, it.目].filter(Boolean).join(' · ');
+    return `<a class="稿项${在 ? ' 在' : ''}${it.可写 ? '' : ' 只读'}"`
+      + ` href="/doc?r=${encodeURIComponent(it.根)}&p=${encodeURIComponent(it.相对)}"`
+      + ` data-路="${转义((it.根 + '/' + it.相对).toLowerCase())}"`
+      + ` data-类="${转义(it.类)}" data-根="${转义(it.根)}"`
+      + ` data-可写="${it.可写 ? '1' : '0'}" data-记="${记 ? '1' : '0'}">`
+      + `<span class="稿行1"><span class="稿名">${转义(it.短名)}</span>`
+      + `<span class="稿日">${转义(it.日 || '')}</span></span>`
+      + `<span class="稿行2"><span class="稿处">${转义(处)}</span>${记}`
+      + `<span class="稿注">${字节文(it.字节)}</span></span></a>`;
+  };
+
+  const 组 = [...桶.values()].filter((g) => g.项.length).map((g) => {
+    // 组内按改动时间倒序——你最近碰过的最可能是你要找的
+    const 项 = g.项.slice().sort((a, b) => b.改于 - a.改于).map(条).join('\n');
+    // **默认只摊开「在办文稿」**，以及当前打开那份所在的组。
+    // 一进来就把 454 份工单留痕摊在面前，等于什么都没分。
+    const 开 = (g.键 === 'zaiban' && !当前) || (当前 && 当前.类 === g.键) ? ' open' : '';
+    const 记数 = g.项.filter(文稿lib.有记号).length;
+    return `<details class="稿组" data-类="${转义(g.键)}"${开}>
+<summary><span class="组名">${转义(g.名)}</span>`
+      + (记数 ? `<span class="组记">${记数} 待办</span>` : '')
+      + `<span class="稿数">${g.项.length}</span></summary>
+<div class="稿释">${转义(g.释 || '')}</div>
 <div class="稿项们">${项}</div></details>`;
   }).join('\n');
+
+  const 类筛 = [...桶.values()].filter((g) => g.项.length).map((g) =>
+    `<button type="button" class="类筛钮" data-类="${转义(g.键)}">${转义(g.名)}<b>${g.项.length}</b></button>`).join('');
 
   return `<aside class="稿库">
   <div class="稿搜">
     <input id="稿搜框" type="search" placeholder="搜文件名（回车再搜正文）" autocomplete="off" spellcheck="false">
   </div>
-  <div class="稿计" id="稿计">${列表.length} 份 · ${可写数} 份可写</div>
+  <div class="稿筛" id="稿筛">
+    <button type="button" class="筛钮 要紧" id="筛记号"${有记数 ? '' : ' disabled'}>
+      有记号<b>${有记数}</b></button>
+    <button type="button" class="筛钮" id="筛可写">可写<b>${可写数}</b></button>
+    <button type="button" class="筛钮 清" id="筛清" hidden>清筛选</button>
+  </div>
+  <div class="类筛" id="类筛">${类筛}</div>
+  <div class="稿计" id="稿计">${列表.length} 份 · ${可写数} 可写 · ${有记数} 份有记号</div>
   <div class="稿列" id="稿列">
 ${组}
   </div>
@@ -177,6 +219,7 @@ function 挂(app, opts = {}) {
         当前 = {
           根: 键, 根名: 校.根.名 || 键, 相对: 校.相对,
           可写: 写.行, 只读因: 写.因,
+          类: 文稿lib.归类(键, 校.相对),   // 组要据此决定摊不摊开
         };
         if (读.行) 条们 = 文稿lib.扫记号(读.文);
       }

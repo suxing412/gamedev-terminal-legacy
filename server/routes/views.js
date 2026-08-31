@@ -134,13 +134,43 @@ function 挂(app, 根) {
   <ul class="items">${组条.map(条HTML).join('')}</ul>
 </section>`).join('');
 
-    const 档位 = [...new Set(带分.map((e) => e.tier).filter(Boolean))].sort();
+    // 源下拉列**全部配置过的源**，不是「数据里出现过的」。
+    //
+    // 首版是 `[...组.keys()]`——于是一个当天颗粒无收的源在这一页**完全不存在**：
+    // 你看不出「四个源里三个没出货」，只会以为这台机器本来就只订了一个源。
+    // 而这四个源的实况是 Game Developer 403、itch.io 连接超时、explorminate 从未被调度
+    // ——那正是这一页最该告诉人的事，它却把这件事藏起来了。
+    // （PRODUCT.md 原则五：宁可显示「读不到」，绝不显示占位数。零也是数，不能不显示。）
+    const 全部源 = 读.源表(根);
+    const 组计 = new Map([...组.entries()].map(([k, v]) => [k, v.length]));
+    const 无货 = 全部源.filter((x) => !组计.get(x.id));
+    const 源项 = 全部源.map((x) => {
+      const n = 组计.get(x.id) || 0;
+      return `<option value="${转义(x.id)}"${n ? '' : ' disabled'}>`
+        + `${转义(x.名称 || x.id)}（${n} 条）</option>`;
+    }).join('');
+
+    // 档位同理：配置里有 S/A/B 三档，只列数据里出现过的会让「S 档今天一条没有」看不见
+    const 全部档 = [...new Set([...全部源.map((x) => x.档位).filter(Boolean),
+      ...带分.map((e) => e.tier).filter(Boolean)])].sort();
+    const 档计 = new Map();
+    for (const e of 带分) if (e.tier) 档计.set(e.tier, (档计.get(e.tier) || 0) + 1);
+    const 档项 = 全部档.map((t) => {
+      const n = 档计.get(t) || 0;
+      return `<option value="${转义(t)}"${n ? '' : ' disabled'}>${转义(t)}（${n} 条）</option>`;
+    }).join('');
+
     const 滤 = `<div class="filters">
-  <label>源 <select id="f-src"><option value="">全部</option>${[...组.keys()].map((k) => `<option value="${转义(k)}">${转义(源名.get(k) || k)}</option>`).join('')}</select></label>
-  <label>档位 <select id="f-tier"><option value="">全部</option>${档位.map((t) => `<option value="${转义(t)}">${转义(t)}</option>`).join('')}</select></label>
-  <label class="ck"><input type="checkbox" id="f-in"> 只看已入报</label>
+  <label>源 <select id="f-src"><option value="">全部（${带分.length} 条）</option>${源项}</select></label>
+  <label>档位 <select id="f-tier"><option value="">全部</option>${档项}</select></label>
+  <label class="ck"><input type="checkbox" id="f-in"><span>只看已入报</span></label>
   <span class="count" id="f-count">${带分.length} 条</span>
-</div>`;
+</div>`
+      // 没出货的源单列一行。**这是这一页最该说的话**：不是「今天只有这些」，
+      // 是「今天有几个源什么都没给你」——两句话在值班屏上完全不同。
+      + (无货.length ? `<p class="noyield">今天有 ${无货.length} 个源颗粒无收：`
+        + 无货.map((x) => 转义(x.名称 || x.id)).join('、')
+        + `　<a href="/watch">去监视页看为什么</a></p>` : '');
 
     res.status(200).type('html').send(壳({
       题: `${日} · 原始流`, 头部,

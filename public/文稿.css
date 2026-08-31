@@ -14,8 +14,16 @@ html { height: 100%; }
  *
  * 用 body.页 而不是裸 body：这张表在主页壳里也会被预载，
  * 裸 body 规则会把主页那三栏骨架一起改掉。类名由 页.js 的 壳() 加。
+ *
+ * **`:has(.稿容)` 那半边同样不能省，而我第一版漏了。**
+ * 守住了 body 却没守住 .视图——而 .视图 是**所有**视图片段共用的那个壳，
+ * 于是这条 `overflow: hidden` 跟着漏给了日报、原始流、监视、班次、席间存照：
+ * 席间存照的内容 15487px 高被裁在 491px 的框里，**五页在壳里全都滚不动了**。
+ * 症状还是那一类：不报错、不白屏，只是滚轮没反应。
+ * 教训跟当初 body 那条一模一样——**预载的样式表，每一条选择器都要问一句
+ * 「它会不会落到别人身上」**，body 会，.视图 也会。
  */
-body.页, .视图 {
+body.页:has(.稿容), .视图:has(.稿容) {
   background: var(--ground);
   color: var(--ink);
   font-family: var(--sans);
@@ -25,7 +33,7 @@ body.页, .视图 {
   flex-direction: column;
   overflow: hidden;
 }
-.wrap, .视图 {
+.wrap:has(.稿容), .视图:has(.稿容) {
   max-width: none;
   padding: 0;
   flex: 1;
@@ -100,6 +108,49 @@ body.页, .视图 {
 }
 .稿搜 input::placeholder { color: var(--ink-3); }
 .稿搜 input:focus { outline: none; border-color: var(--gate); }
+
+/* ── 筛选 ────────────────────────────────────────────
+   记号系统本来就是为「哪些文档在等我」设的。不能一眼筛出有记号的，
+   它就只在你已经打开那一份时才有用——等于只解决了一半。
+   所以「有记号」是这一排里唯一用强调色的那个。 */
+.稿筛 { display: flex; gap: 4px; padding: 6px var(--s3) 0; flex-wrap: wrap; }
+.筛钮, .类筛钮 {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 10.5px;
+  line-height: 1.7;
+  padding: 0 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.筛钮 b, .类筛钮 b {
+  margin-left: 4px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+  opacity: .75;
+}
+.筛钮:hover, .类筛钮:hover { color: var(--ink); border-color: var(--ink-3); }
+.筛钮.开, .类筛钮.开 { color: var(--ink); border-color: var(--gate); background: var(--gate-wash); }
+.筛钮.开 b, .类筛钮.开 b { color: var(--gate); opacity: 1; }
+.筛钮.要紧:not(:disabled) { color: var(--gate); border-color: var(--gate); }
+.筛钮:disabled { opacity: .35; cursor: default; }
+.筛钮.清 { margin-left: auto; border-color: transparent; text-decoration: underline; text-underline-offset: 2px; }
+
+/* 类别筛：横向可滚，不换行撑高——左栏本来就窄，这一排不该吃掉两行 */
+.类筛 {
+  display: flex;
+  gap: 4px;
+  padding: 5px var(--s3);
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--line-soft);
+}
+.类筛::-webkit-scrollbar { display: none; }
+
 .稿计 {
   padding: 6px var(--s3);
   font-size: 11px;
@@ -108,6 +159,14 @@ body.页, .视图 {
   border-bottom: 1px solid var(--line-soft);
 }
 .稿列 { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: var(--s4); }
+
+/* 筛完为空。**空白在值班屏上永远读作「它坏了」**，不是「没有命中」——
+   所以筛空必须有话说，而且必须给出一条走得通的路（清掉筛选）。 */
+.稿筛空 { padding: var(--s4) var(--s3); color: var(--ink-3); }
+.稿筛空[hidden] { display: none; }
+.稿筛空 b { display: block; color: var(--ink-2); font-size: 12px; font-weight: 600; }
+.稿筛空 p { margin: 4px 0 var(--s3); font-size: 11px; line-height: 1.6; }
+.稿筛空 button { text-decoration: none; border-color: var(--line); }
 
 .稿组 > summary {
   padding: 7px var(--s3);
@@ -125,39 +184,84 @@ body.页, .视图 {
 .稿组[open] > summary::before { content: "▾"; }
 .稿数 { float: right; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 
+/* 每条两行：上行是**名字与日期**，下行是出处、记号、体积。
+ *
+ * 首版是一行，靠 `direction: rtl` 从前面截——截出来是
+ * `.../评审-席间存照-五评-2026-08-29.md`，**开头那截正是区分它们的部分**，
+ * 而重复的日期后缀反倒每行都占着。两行看着高，实际扫得快得多：
+ * 名字左对齐成一列，眼睛一趟扫下来就能比。 */
 .稿项 {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  padding: 5px var(--s3) 5px 26px;
+  display: block;
+  padding: 5px var(--s3) 5px 24px;
   color: var(--ink-2);
   text-decoration: none;
   font-size: 12px;
-  line-height: 1.45;
+  line-height: 1.4;
   border-left: 2px solid transparent;
 }
 .稿项:hover { background: var(--raised); color: var(--ink); }
 .稿项.在 { background: var(--gate-wash); color: var(--ink); border-left-color: var(--gate); }
+.稿行1 { display: flex; align-items: baseline; gap: 6px; }
+.稿行2 { display: flex; align-items: baseline; gap: 6px; margin-top: 1px; }
 .稿名 {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  direction: rtl;          /* 长路径截前面留后面——文件名比目录重要 */
-  text-align: left;
 }
-.稿注 { color: var(--ink-3); font-size: 10px; font-variant-numeric: tabular-nums; flex: none; }
-.稿只读 {
+.稿日 {
   flex: none;
-  font-size: 9px;
+  font: 400 10px var(--mono);
+  font-variant-numeric: tabular-nums;
   color: var(--ink-3);
-  border: 1px solid var(--line);
-  border-radius: 3px;
-  padding: 0 3px;
+  opacity: .75;
 }
+.稿处 {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  color: var(--ink-3);
+  opacity: .8;
+}
+.稿注 { color: var(--ink-3); font-size: 10px; font-variant-numeric: tabular-nums; flex: none; opacity: .7; }
+/* 只读的压一档。**不给它单独一个徽章**——951 份里 498 份是只读的，
+   每行挂一个「只读」标签就是 498 份噪声。用整行的轻重说这件事。 */
+.稿项.只读 .稿名 { color: var(--ink-3); }
+.稿项.只读:hover .稿名 { color: var(--ink-2); }
+
+/* 记号：这是「这份在等你」的信号，所以它在这一行里最亮 */
+.稿记 { flex: none; display: inline-flex; gap: 3px; }
+.稿记 i {
+  font-style: normal;
+  font-size: 9.5px;
+  line-height: 1.5;
+  padding: 0 3px;
+  border-radius: 3px;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid currentColor;
+}
+.稿记 i.gai { color: var(--gate); }
+.稿记 i.jia { color: var(--live); }
+.稿记 i.shan { color: var(--gate-deep); }
+.稿记 i.wen { color: var(--ink-2); }
+
 .稿项[hidden] { display: none; }
 .稿组.空 { display: none; }
+.稿组 .稿释 { padding: 2px var(--s3) 5px 24px; font-size: 10px; color: var(--ink-3); opacity: .65; line-height: 1.5; }
+.组名 { }
+.组记 {
+  margin-left: 6px;
+  font-size: 9.5px;
+  color: var(--gate);
+  border: 1px solid var(--gate);
+  border-radius: 3px;
+  padding: 0 4px;
+  font-variant-numeric: tabular-nums;
+}
 
 /* ── 右：阅读面 ───────────────────────────────────────── */
 .稿面 { position: relative; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }

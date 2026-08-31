@@ -58,7 +58,14 @@ body, .视图 {
  * 禁用不等于要让人看不见：它只需要看起来点不动。 */
 .nav.off { color: var(--ink-3); cursor: default; }
 
-.wrap, .视图 { padding: var(--s6) var(--s5) 96px; max-width: 1100px; margin: 0 auto; }
+.wrap, .视图 {
+  /* **容器声明放这一处**：所有视图页都加载 read.css。
+     下面各表的响应式断点一律走 @container 视 而不是 @media——
+     这些页在主页壳里是被抠成片段塞进中栏那一格的：视口 1280+、容器只有 720，
+     按视口量的断点**一次都没触发过**，于是窄栏里摆着宽布局
+     （席间存照因此在 720px 里还切着三列，内容栏被挤没）。 */
+  container-type: inline-size;
+  container-name: 视; padding: var(--s6) var(--s5) 96px; max-width: 1100px; margin: 0 auto; }
 
 /* ── V1 日报 ── */
 .digest { max-width: 68ch; }
@@ -91,12 +98,65 @@ body, .视图 {
 }
 .filters label { color: var(--ink-3); font-size: 13px; }
 .filters select, .filters input { font: inherit; font-size: 13px; }
+
+/* 下拉与复选框是**没画过的浏览器表面**。
+   不画的话它们带着操作系统的箭头、边框与勾选色进来，
+   而那套东西不属于这块屏的任何一个色阶——一眼就看得出是「组装的」不是「做的」。
+   （craft floor 把这一条单列：text selection、caret、滚动条、focus ring、下拉箭头。） */
 .filters select {
+  appearance: none;
   background: var(--raised); color: var(--ink); border: 1px solid var(--line);
-  border-radius: 6px; padding: 3px var(--s2); margin-left: var(--s1);
+  border-radius: 6px; padding: 4px 26px 4px var(--s3); margin-left: var(--s1);
+  cursor: pointer;
+  /* 箭头自己画：一个 7×5 的三角，颜色跟着 --ink-3 走 */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='7' height='5'%3E%3Cpath d='M0 0h7L3.5 5z' fill='%23a8a9ab'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
 }
-.filters .ck { display: inline-flex; align-items: center; gap: var(--s1); cursor: pointer; }
+.filters select:hover { border-color: var(--ink-3); }
+.filters select:focus-visible { outline: 2px solid var(--gate); outline-offset: 1px; }
+/* 零条的源仍然列出来但点不动——**看得见的零** 比看不见的零有用得多 */
+.filters select option:disabled { color: var(--ink-3); }
+
+/* 复选框：原生的 13px 太小（点击目标下限 44px 在桌面可以放宽，但 13px 是明显过小），
+   而且它的勾选色是系统蓝，跟这块屏没关系。自绘一个方块 + 勾。 */
+.filters .ck { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; padding: 4px 0; }
+.filters .ck input {
+  appearance: none;
+  width: 15px; height: 15px; margin: 0;
+  border: 1px solid var(--line); border-radius: 4px;
+  background: var(--raised);
+  cursor: pointer;
+  display: grid; place-content: center;
+}
+.filters .ck input::before {
+  content: ""; width: 8px; height: 8px;
+  transform: scale(0); transition: transform .1s cubic-bezier(.2,.9,.3,1);
+  background: var(--gate);
+  clip-path: polygon(14% 46%, 0 60%, 39% 100%, 100% 22%, 86% 8%, 39% 71%);
+}
+.filters .ck input:checked { border-color: var(--gate); }
+.filters .ck input:checked::before { transform: scale(1); }
+.filters .ck input:focus-visible { outline: 2px solid var(--gate); outline-offset: 2px; }
+.filters .ck:hover input { border-color: var(--ink-3); }
+@media (prefers-reduced-motion: reduce) {
+  .filters .ck input::before { transition: none; }
+}
+
 .filters .count { color: var(--ink-3); font: 400 12px var(--mono); justify-self: end; }
+
+/* 没出货的源。**这是这一页最该说的话**——
+   「今天只有这些」与「今天有三个源什么都没给你」是完全不同的两句。 */
+.noyield {
+  margin: calc(-1 * var(--s4)) 0 var(--s5);
+  padding: 7px var(--s4);
+  font-size: 12px; line-height: 1.6;
+  color: var(--warn);
+  background: color-mix(in oklch, var(--warn) 9%, transparent);
+  border: 1px solid color-mix(in oklch, var(--warn) 26%, transparent);
+  border-radius: 6px;
+}
+.noyield a { color: var(--warn); text-underline-offset: 3px; }
 
 .grp { margin: 0 0 var(--s6); }
 .grp h2 { font-size: 14px; font-weight: 600; color: var(--ink-2); margin: 0 0 var(--s3); }
@@ -162,7 +222,7 @@ body, .视图 {
 .chat-form button { padding: var(--s1) var(--s3); color: var(--ink); background: var(--raised); border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
 .chat-form output { margin-left: var(--s2); }
 
-@media (max-width: 760px) {
+@container 视 (max-width: 760px) {
   .top { grid-template-columns: 1fr; gap: var(--s2); }
   .tabs, .pager { justify-content: start; }
   .filters { grid-auto-flow: row; grid-auto-columns: auto; gap: var(--s2); }

@@ -374,6 +374,12 @@ const 变异 = [
     找: '    try { r = 查锁(p); } catch (e) { continue; }   // 闸自己坏了不拖垮坐席',
     换: "    try { r = 查锁(p); } catch (e) { r = { 行: false, 因: '闸自己坏了' }; }" },
 
+  // ── 2026-08-31 晚 · UI 巡礼 ──
+  { 名: '文稿.css 往裸 .视图 上写布局（overflow:hidden 漏给五页，全都滚不动）',
+    档: 'public/文稿.css', 测: 'node --test test/壳.test.js',
+    找: 'body.页:has(.稿容), .视图:has(.稿容) {',
+    换: 'body.页, .视图 {' },
+
   { 名: 'version-keep 不校锁（谁都能往版本环里塞东西）',
     档: 'server/routes/文稿页.js', 测: 'node --test test/写口.test.js',
     找: "    const 判 = 锁lib.可写(锁台.条(位.根键, 位.相对), String(req.body.令牌 || ''));\n    if (!判.行) return res.status(409).json({ 行: false, 因: 判.因 });\n    const v = 锁台.存版(",

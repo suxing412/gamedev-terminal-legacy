@@ -348,6 +348,17 @@ body {
 .事 span { color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .事.重 span { color: var(--ink); }
 
+/* 日期分隔。窗口是 600 行 ≈ 58 小时，一屏里三成的行不是当天的；
+   **每行都写日期太吵，一天写一次刚好**。它不是标题，是一条界——所以做得比条目还轻。 */
+.日隔 {
+  position: sticky; top: 0; z-index: 1;
+  padding: var(--s2) var(--s4) 2px;
+  background: var(--panel);
+  font: 500 10px var(--mono); letter-spacing: 0.08em;
+  color: var(--ink-3);
+  border-bottom: 1px solid var(--line-soft);
+}
+
 /* 折起来的重复事件。**次数用等宽数字**，因为它会跳（×19 → ×20），
    不等宽的话每跳一次整行都要抖一下，而这一栏整天在屏上。 */
 .事.折 span { color: var(--ink-3); }

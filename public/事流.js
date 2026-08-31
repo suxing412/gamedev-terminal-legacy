@@ -62,10 +62,14 @@
       if (尾 && 尾.种 === 种) {
         尾.次 += 本次;
         尾.起时 = e.起时 || e.时;        // 新在前，所以后来的那条是更早的
+        尾.起日 = e.起日 || e.日 || 尾.起日;
         continue;
       }
       if (上限 && 出.length >= 上限) break;
-      出.push({ 种, 时: e.时, 起时: e.起时 || e.时, 文: e.文, 次: 本次, 级: e.级 || null });
+      出.push({
+        种, 时: e.时, 起时: e.起时 || e.时, 文: e.文, 次: 本次, 级: e.级 || null,
+        日: e.日 || null, 起日: e.起日 || e.日 || null,
+      });
     }
     return 出;
   }
@@ -90,13 +94,29 @@
   const 转 = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+  /**
+   * 一个时刻怎么写。
+   *
+   * **今天的只写 HH:MM，别的日子必须带上 MM-DD。**
+   * 窗口是 600 行 ≈ 58 小时，而首版每行只有 HH:MM：实测一屏 51 组里 30 组不是当天，
+   * 「03:49 值守塔阵亡」实际是两天前，上下行标着 05:11 与 03:46——
+   * **时刻局部递减，屏上没有任何提示**。一栏按时间倒序的流，
+   * 如果它的时刻读起来不是单调的，那这一栏就不能信了。
+   *
+   * 缺日期时只写时刻（老数据、或监视页那种本来就只有当天的源），不编一个日期出来。
+   */
+  function 刻(日, 时, 今日) {
+    if (!日 || (今日 && 日 === 今日)) return String(时 || '');
+    return String(日).slice(5) + ' ' + String(时 || '');
+  }
+
   /** 一条（可能是折起来的）事件的 <li>。折起来的要讲清「同一件事、几次、从什么时候到什么时候」。 */
-  function 事条(e) {
+  function 事条(e, 今日) {
     const 计 = e.次 > 1
-      ? `<b class="wev-n">×${e.次}</b><span class="wev-s">${转(e.起时)}→${转(e.时)}</span>`
+      ? `<b class="wev-n">×${e.次}</b><span class="wev-s">${转(刻(e.起日, e.起时, 今日))}→${转(刻(e.日, e.时, 今日))}</span>`
       : '';
     return `<li class="wev-i${e.级 === '急' ? ' urg' : ''}${e.次 > 1 ? ' fold' : ''}">`
-      + `<time>${转(e.时)}</time>`
+      + `<time>${转(刻(e.日, e.时, 今日))}</time>`
       + `<span class="txt">${转(String(e.文).slice(0, 110))}</span>${计}</li>`;
   }
 
@@ -115,7 +135,7 @@
     return y;
   });
 
-  const api = { 事种, 折叠, 脱种, 拆事, 事条, 等条 };
+  const api = { 事种, 折叠, 脱种, 拆事, 事条, 等条, 刻 };
   if (typeof module === 'object' && module && module.exports) module.exports = api;
   else 根.事流 = api;
 }(typeof self !== 'undefined' ? self : this));

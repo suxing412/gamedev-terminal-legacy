@@ -374,6 +374,24 @@ const 变异 = [
     找: '    try { r = 查锁(p); } catch (e) { continue; }   // 闸自己坏了不拖垮坐席',
     换: "    try { r = 查锁(p); } catch (e) { r = { 行: false, 因: '闸自己坏了' }; }" },
 
+  // ── 2026-09-01 · 事件流跨日（600 行窗口装 58 小时，而每行只有 HH:MM）──
+  { 名: '时刻不带日期（两天前的 03:49 插在今天 05:11 与 03:46 中间，时刻局部递减）',
+    档: 'public/事流.js', 测: 'node --test test/事件折叠.test.js',
+    找: '    return String(日).slice(5) + \' \' + String(时 || \'\');',
+    换: "    return String(时 || '');" },
+  { 名: '今天的也标日期（每行都写日期，一栏噪声）',
+    档: 'public/事流.js', 测: 'node --test test/事件折叠.test.js',
+    找: '    if (!日 || (今日 && 日 === 今日)) return String(时 || \'\');',
+    换: "    if (!日) return String(时 || '');" },
+  { 名: '折叠不记起点那天（跨午夜显示成 23:03→02:13，起点比终点晚）',
+    档: 'public/事流.js', 测: 'node --test test/事件折叠.test.js',
+    找: '        尾.起日 = e.起日 || e.日 || 尾.起日;',
+    换: '' },
+  { 名: '/api/events 不下发日期（前端编不出它，只能继续只写 HH:MM）',
+    档: 'server.js', 测: 'node --test test/事件折叠.test.js',
+    找: "    const 条 = 行.map((l) => ({ 日: l.slice(1, 11), 时: l.slice(12, 17), 文: l.slice(19) }));",
+    换: "    const 条 = 行.map((l) => ({ 时: l.slice(12, 17), 文: l.slice(19) }));" },
+
   // ── 2026-09-01 · 归类（评审：此前零判据覆盖，掏空它 308 条仍全绿）──
   { 名: '归类塌成单桶（分类功能整个拆掉，屏上每一组的标题都成了摆设）',
     档: 'server/lib/文稿.js', 测: 'node --test test/归类.test.js',

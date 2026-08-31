@@ -213,8 +213,9 @@
     //
     // **后端存着 50 版，而在这之前前端一个入口都没有。**
     // 「存了但看不到」跟没存的区别，只在你肯去翻磁盘时才成立——而人不会去翻磁盘。
-    // 冲突框里那句「盘上那版已经存进版本历史，可以找回」也因此是句空话：
-    // 承诺了一条路，路口却没有门。
+    // 冲突框里那句「盘上那版已经存进版本历史，可以找回」原本是句空话：
+    // 承诺了一条路，路口却没有门。**2026-09-01 补上了那扇门**——
+    // 每一版可以「和当前比」（复用冲突框那个 画差异）与「用这一版覆盖编辑器」。
     const 史钮 = $('#稿史钮');
     const 史盒 = $('#稿史');
     if (史钮 && 史盒) {
@@ -242,7 +243,7 @@
             + '<div class="史条们">' + 版.map((v) => {
               const t = new Date(v.时);
               const 时文 = Number.isFinite(v.时) && v.时 > 0
-                ? `${t.getMonth() + 1}-${String(t.getDate()).padStart(2, '0')} ${t.toTimeString().slice(0, 5)}`
+                ? `${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')} ${t.toTimeString().slice(0, 5)}`
                 : '时刻不明';
               return `<button type="button" class="史条" data-档="${encodeURIComponent(v.档)}">`
                 + `<span class="史时">${时文}</span>`
@@ -254,7 +255,56 @@
           史盒.innerHTML = '<div class="史空 坏">取不到历史：' + (e && e.message ? e.message : e) + '</div>';
         }
       });
+      // 当前选中的那一版。**放在闭包里而不是 DOM 上**：切换「全文/和当前比」
+      // 只是换一种画法，不该再去服务端取一次。
+      let 史文 = null;
+
+      // 「当前」是谁：**只有在编辑模式下前端手上才有源码**。
+      // 不在编辑时，页面上是渲染好的 HTML，不是 markdown——
+      // 拿它去比会得出一堆假差异，那比不给对比更坏。所以那时把这个钮禁掉并说明原因。
+      const 当前文 = () => {
+        if (编 && 编.编器) return { 文: 编.编器.取文(), 说: '编辑器里这份（含未存的改动）' };
+        return null;
+      };
+
+      function 画史文(模式) {
+        const 格 = document.getElementById('史文');
+        if (!格 || !史文) return;
+        格.hidden = false;
+        const 当 = 当前文();
+        const 可比 = !!(当 && window.文稿编辑 && window.文稿编辑.画差异);
+        const 条 = '<div class="史条栏">'
+          + `<button type="button" class="史模" data-模="全"${模式 === '全' ? ' class="在"' : ''}>全文</button>`
+          + `<button type="button" class="史模" data-模="比"${可比 ? '' : ' disabled title="要先进编辑模式：不在编辑时页面上是渲染好的 HTML，不是源码，拿它去比会得出一堆假差异"'}>和当前比</button>`
+          + `<button type="button" class="史用" data-用="1"${编 && 编.编器 ? '' : ' disabled title="要先进编辑模式，才有地方放"'}>用这一版覆盖编辑器</button>`
+          + `<span class="史注">${模式 === '比' && 当 ? '左＝这一版　右＝' + 当.说 : ''}</span>`
+          + '</div>';
+        if (模式 === '比' && 可比) {
+          格.innerHTML = 条 + '<div class="史差">' + window.文稿编辑.画差异(史文.文, 当.文) + '</div>';
+        } else {
+          格.innerHTML = 条 + '<pre class="史全"></pre>';
+          格.querySelector('.史全').textContent = 史文.文;
+        }
+        for (const x of $$('.史模', 格)) x.classList.toggle('在', x.getAttribute('data-模') === 模式);
+      }
+
       史盒.addEventListener('click', async (e) => {
+        const 模 = e.target.closest('.史模');
+        if (模) { 画史文(模.getAttribute('data-模')); return; }
+        const 用 = e.target.closest('.史用');
+        if (用) {
+          if (!编 || !编.编器 || !史文) return;
+          // **只灌进编辑器，不落盘。**落盘仍走存盘闸（锁、基指纹、三路合并全都还在）——
+          // 「恢复」在这里的意思是「把这一版摆到你面前」，不是「替你决定了」。
+          const 答 = await 问(`把 ${史文.时} 那一版覆盖进编辑器？\n\n当前未保存的改动会被顶掉（它还在草稿里）。\n覆盖之后要按存盘才真的写回盘上。`,
+            '用这一版', '覆盖', '算了');
+          if (!答) return;
+          编.编器.设文(史文.文);
+          编.脏 = true;
+          态文(`已换成 ${史文.时} 那一版 · 未保存`, '警');
+          排草稿();
+          return;
+        }
         const b = e.target.closest('.史条');
         if (!b) return;
         const { r, p } = 位();
@@ -266,7 +316,15 @@
         文格.textContent = '取…';
         try {
           const j = await (await fetch(`/api/doc/version?r=${encodeURIComponent(r)}&p=${encodeURIComponent(p)}&v=${b.getAttribute('data-档')}`)).json();
-          文格.textContent = j.行 ? j.文 : ('读不到这一版：' + (j.因 || ''));
+          if (!j.行) { 文格.textContent = '读不到这一版：' + (j.因 || ''); return; }
+          // **看得到，还要拿得回来。**
+          //
+          // 在这之前这里只把全文塞进一个 26vh 高的滚动 div——没有恢复、没有对比、
+          // 没有复制。而冲突框那句「盘上那版已经存进版本历史，可以找回」
+          // 就成了一句空话：**承诺了一条路，路口却没有门**。
+          // 画差异 就在手边（冲突框正在用它），/api/doc/version 也已经把全文回给前端了。
+          史文 = { 档: b.getAttribute('data-档'), 文: j.文, 时: b.querySelector('.史时').textContent };
+          画史文('全');
         } catch (err) { 文格.textContent = '读不到这一版：' + (err && err.message ? err.message : err); }
       });
     }
@@ -705,7 +763,7 @@
         // 所以那句话在这个框唯一会出现的场景里**每一次都是假的**。
         // 现在服务端会在回 409 之前先把盘上那版存进版本环，兑现了才敢这么说。
         const 后路 = j.已存版
-          ? '盘上那版已经存进版本历史，可以找回。'
+          ? '盘上那版已经存进版本历史，可以找回（顶栏那颗「历史」→ 选那一版 → 用这一版覆盖编辑器）。'
           : '**盘上那版没能存进版本历史——这一步覆盖之后它就没了。**';
         if (!await 问(`这会用你手上这版覆盖盘上那版。\n${后路}`, '覆盖盘上那版', '覆盖', '再想想')) return;
         编.基指纹 = j.盘纹;           // 认下盘上现状，再存一次就不会再冲突

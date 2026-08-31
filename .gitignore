@@ -1,5 +1,12 @@
 node_modules/
 .session.json
+# 私聊会话档：一席一份（2026-08-31 起）。**只挡 .session.json 是不够的**——
+# 那条规则写下时私聊还没落地，而 `git add -A` 当晚就把 .session-总监.json 收进去了。
+# 加通配的原因不是洁癖：会话 id 是运行时状态，进了库以后每次说话都会脏一个文件，
+# 而「提交只 add 自己改的文件」这条共树纪律就是被这种噪音磨没的。
+.session-*.json
+# 用量流水：append-only 的运行时账，每说一句话就长一行。同上。
+用量.jsonl
 .log
 .err
 

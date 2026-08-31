@@ -165,7 +165,9 @@ function 挂(app, 根) {
   <label>档位 <select id="f-tier"><option value="">全部</option>${档项}</select></label>
   <label class="ck"><input type="checkbox" id="f-in"><span>只看已入报</span></label>
   <span class="count" id="f-count">${带分.length} 条</span>
-</div>`
+  <button type="button" class="f-clr" id="f-clr" hidden>清掉筛选</button>
+</div>
+<p class="f-empty" id="f-empty" hidden></p>`
       // 没出货的源单列一行。**这是这一页最该说的话**：不是「今天只有这些」，
       // 是「今天有几个源什么都没给你」——两句话在值班屏上完全不同。
       + (无货.length ? `<p class="noyield">今天有 ${无货.length} 个源颗粒无收：`

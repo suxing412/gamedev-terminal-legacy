@@ -16,6 +16,9 @@ function 装() {
   var 数 = document.getElementById('f-count');
   if (!源 || !档 || !入) return;
 
+  var 清 = document.getElementById('f-clr');
+  var 空 = document.getElementById('f-empty');
+
   var 条 = Array.prototype.slice.call(document.querySelectorAll('.item'));
   var 组 = Array.prototype.slice.call(document.querySelectorAll('.grp'));
 
@@ -35,11 +38,39 @@ function 装() {
       g.hidden = !有;
     });
     if (数) 数.textContent = 留 + ' 条' + (留 === 条.length ? '' : '（共 ' + 条.length + '）');
+
+    // **全部筛空 ≠ 收起最后一个组。**上一版只做到了「组空就收起组标题」，
+    // 全部组都空的时候这一层没人接住：整页除了筛选栏是一片空白，
+    // 唯一的信号是右端 11px 的「0 条（共 33）」。
+    // 隔壁文稿台为同一件事写过一句注释：「空白在值班屏上永远读作『它坏了』」——
+    // 那条结论当时没传到这一页。
+    var 有筛 = !!(s || t || i);
+    if (清) 清.hidden = !有筛;
+    if (空) {
+      if (留 === 0 && 条.length > 0) {
+        var 说 = [];
+        if (s) 说.push('源＝' + s);
+        if (t) 说.push('档位＝' + t);
+        if (i) 说.push('只看已入报');
+        空.textContent = '这 ' + 条.length + ' 条里，没有一条同时满足：' + 说.join(' · ')
+          + '。数据是有的，是这组筛选把它们全挡住了。';
+        空.hidden = false;
+      } else {
+        空.hidden = true;
+      }
+    }
+  }
+
+  function 清筛() {
+    源.value = ''; 档.value = ''; 入.checked = false;
+    刷();
+    源.focus();
   }
 
   源.addEventListener('change', 刷);
   档.addEventListener('change', 刷);
   入.addEventListener('change', 刷);
+  if (清) 清.addEventListener('click', 清筛);
   刷();
 }
 

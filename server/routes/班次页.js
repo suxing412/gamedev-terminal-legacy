@@ -77,6 +77,23 @@ function 排期说(c) {
   return `${转义(c.到点)} <span class="only">${转义(文)}</span>`;
 }
 
+// 闸：两个数都要显示。它们是两道独立的闸，任一挡住都开不了班——
+// 只显示一个会让人查错方向。阈值跟着显示，裸数字没有意义。
+// 单拎出来是因为**空态那条路也要显示它**：一班都没有的时候，
+// 「闸开着吗」这个问题一样要有答案。
+function 渲染闸(闸) {
+  const g = 闸 || {};
+  const 闸态 = g.行 ? 'ok' : 'bad';
+  const 用 = g.已耗 != null && g.上限 ? `${(g.已耗 / 1000).toFixed(1)}k / ${(g.上限 / 1000).toFixed(0)}k` : '读不到';
+  const 水 = g.水位 != null ? `${g.水位}% / 70%` : '读不到';
+  return `<div class="sgate g-${闸态}">
+      <span class="gk">闸</span>
+      <span class="gv">今日 <b>${转义(用)}</b></span>
+      <span class="gv">5小时窗 <b>${转义(水)}</b></span>
+      <span class="gw">${转义(g.因 || '')}</span>
+    </div>`;
+}
+
 /**
  * 班次带：按**到点先后**排成一条，不是摆成卡片网格。
  *
@@ -87,8 +104,20 @@ function 排期说(c) {
  *      它假装信息很多，实际每格只有三个字段。既有监视页的 .wbar 已经是
  *      「一排状态」的惯用法，这里继承它，不另发明。
  */
-function 渲染带(今日, 闸) {
+function 渲染带(今日, 闸, 无班因) {
   const 排好 = 今日.slice().sort((a, b) => String(a.到点).localeCompare(String(b.到点)));
+
+  // **空态要在补钟之前判。**首版无条件先把「现在」这个钟塞进段里，
+  // 于是下面那句 `格 || '<p class="hint">…一个班次都没有…</p>'` 的右半边永远不渲染——
+  // 唯一那句解释是死代码。屏上只剩一个孤零零的钟，而 (a) 没配置 /
+  // (b) 还没到点 / (c) 配置读坏了 三种情形长得一模一样。
+  if (!排好.length) {
+    const 因 = 无班因 || '今天没有任何班次';
+    return `<section class="sbar">
+    <div class="sline"><p class="hint">${转义(因)}</p></div>
+    ${渲染闸(闸)}
+  </section>`;
+  }
   const 此刻 = (() => { const d = new Date(); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; })();
   let 插过 = false;
   const 段 = [];
@@ -108,20 +137,9 @@ function 渲染带(今日, 闸) {
   if (!插过) 段.push(`<span class="now" aria-label="现在">${转义(此刻)}</span>`);
   const 格 = 段.join('');
 
-  // 闸：两个数都要显示。它们是两道独立的闸，任一挡住都开不了班——
-  // 只显示一个会让人查错方向。阈值跟着显示，裸数字没有意义。
-  const g = 闸 || {};
-  const 闸态 = g.行 ? 'ok' : 'bad';
-  const 用 = g.已耗 != null && g.上限 ? `${(g.已耗 / 1000).toFixed(1)}k / ${(g.上限 / 1000).toFixed(0)}k` : '读不到';
-  const 水 = g.水位 != null ? `${g.水位}% / 70%` : '读不到';
   return `<section class="sbar">
-    <div class="sline">${格 || '<p class="hint">班次.json 里一个班次都没有——定点上工是关着的。</p>'}</div>
-    <div class="sgate g-${闸态}">
-      <span class="gk">闸</span>
-      <span class="gv">今日 <b>${转义(用)}</b></span>
-      <span class="gv">5小时窗 <b>${转义(水)}</b></span>
-      <span class="gw">${转义(g.因 || '')}</span>
-    </div>
+    <div class="sline">${格}</div>
+    ${渲染闸(闸)}
   </section>`;
 }
 
@@ -216,11 +234,11 @@ function 挂(app, opts = {}) {
       题: '班次',
       样式: ['/prose.css', '/班次.css'],
       头部: 头({ 标题: '班次', 当前: 'shift', 日: '' }),
-      body: 渲染带(d.今日 || [], d.闸) + 渲染报告(档名, 文) + 渲染历次(d.历次, d.索引读不到),
+      body: 渲染带(d.今日 || [], d.闸, d.无班因) + 渲染报告(档名, 文) + 渲染历次(d.历次, d.索引读不到),
     }));
   });
 
   app.use(r);
 }
 
-module.exports = { 挂, 态谱, 拆第一眼 };
+module.exports = { 挂, 态谱, 拆第一眼, 渲染带, 渲染闸 };

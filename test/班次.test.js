@@ -484,3 +484,78 @@ test('报告落点带日期与班次名，且非法字符被换掉', () => {
   assert.ok(!/[\\/:*?"<>|]/.test(path.basename(p)), '文件名里不许留非法字符：' + path.basename(p));
   assert.ok(p.endsWith('.md'));
 });
+
+// ── 空态：一班都没有的时候，屏上说的是哪一种「没有」 ──────────────
+//
+// 案发（2026-08-31 内部评审 S12）：`渲染带()` 无条件先把「现在」这个钟塞进段里，
+// 于是 `格 || '<p class="hint">…一个班次都没有…</p>'` 的右半边**永远不渲染**——
+// 唯一那句解释是死代码。屏上只剩一个孤零零的钟，而
+// (a) 没有配置文件 / (b) 配置里表是空的 / (c) 文件读坏了
+// 三种情形完全同态，可它们要做的事正相反。
+const { 渲染带, 渲染闸 } = require('../server/routes/班次页');
+
+test('空态① **一班都没有时，那句解释必须真的画出来**（此前是死代码）', () => {
+  const h = 渲染带([], { 行: true, 已耗: 1000, 上限: 20000, 水位: 12 });
+  assert.ok(/class="hint"/.test(h), '空态那句 hint 没渲染：' + h.slice(0, 200));
+  assert.ok(!/class="now"/.test(h), '一班都没有却还画了「现在」那个钟——它是插在班次之间的，没有班次就没有它的位置');
+});
+
+test('空态② 三种「没有」要说得不一样', () => {
+  const 闸 = { 行: true, 已耗: 0, 上限: 20000, 水位: 5 };
+  const 没配 = 渲染带([], 闸, '没有 班次.json —— 定点上工是关着的');
+  const 空表 = 渲染带([], 闸, '班次.json 里的 班次表 是空的 —— 定点上工没有任何一班');
+  const 坏档 = 渲染带([], 闸, '班次.json 解不开：Unexpected token —— 今晚一班都不会跑');
+  assert.ok(/没有 班次.json/.test(没配));
+  assert.ok(/班次表 是空的/.test(空表));
+  assert.ok(/解不开/.test(坏档));
+  assert.notStrictEqual(没配, 空表);
+  assert.notStrictEqual(空表, 坏档);
+});
+
+test('空态③ **一班都没有时，闸位仍要显示**（「闸开着吗」照样要有答案）', () => {
+  const h = 渲染带([], { 行: false, 已耗: 25000, 上限: 20000, 水位: 88, 因: '今日额度已用满' });
+  assert.ok(/class="sgate/.test(h), '空态那条路把闸位整个丢了');
+  assert.ok(/25\.0k/.test(h) && /88%/.test(h), '两个数都要在：' + h);
+  assert.ok(/g-bad/.test(h), '闸挡着却画成了 ok');
+});
+
+test('空态④ 有班次时照旧插「现在」那个钟', () => {
+  const h = 渲染带([{ 班次: '夜班', 到点: '02:00', 态: '好' }], { 行: true, 已耗: 0, 上限: 20000, 水位: 1 });
+  assert.ok(/class="now"/.test(h), '有班次却没插「现在」——那条时间轴就读不出走到哪儿了');
+  assert.ok(!/class="hint"/.test(h), '有班次却画了空态');
+});
+
+test('空态⑤ **读班次配 要分得出三种「没有」**（它们在屏上曾经完全同态）', () => {
+  const { 读班次配 } = require('../server.js');
+  const 目 = fs.mkdtempSync(path.join(os.tmpdir(), '班配-'));
+  const 档 = path.join(目, '班次.json');
+
+  // ① 文件不存在
+  let r = 读班次配(档);
+  assert.deepStrictEqual(r, []);
+  assert.match(r.因, /没有/, '「没配」这一种没说清：' + r.因);
+
+  // ② 文件在、格式对、表是空的
+  fs.writeFileSync(档, JSON.stringify({ 班次表: [] }), 'utf8');
+  r = 读班次配(档);
+  assert.deepStrictEqual(r, []);
+  assert.match(r.因, /空的/, '「配空了」这一种没说清：' + r.因);
+
+  // ③ 文件在、但 JSON 坏了
+  fs.writeFileSync(档, '{ 这不是 json', 'utf8');
+  r = 读班次配(档);
+  assert.deepStrictEqual(r, []);
+  assert.match(r.因, /解不开/, '「读坏了」这一种没说清：' + r.因);
+
+  // ④ 正常时不带因（别让空态话在有班次的时候冒出来）
+  fs.writeFileSync(档, JSON.stringify({ 班次表: [{ 到点: '02:00', 班次: '夜班' }] }), 'utf8');
+  r = 读班次配(档);
+  assert.strictEqual(r.length, 1);
+  assert.strictEqual(r.因, undefined);
+
+  // ⑤ 因 不可枚举——否则每条 deepStrictEqual([]) 都会莫名其妙地红
+  fs.writeFileSync(档, JSON.stringify({ 班次表: [] }), 'utf8');
+  assert.ok(!Object.keys(读班次配(档)).includes('因'));
+
+  fs.rmSync(目, { recursive: true, force: true });
+});

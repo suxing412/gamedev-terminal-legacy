@@ -892,6 +892,9 @@ function 班次取数() {
     历次,
     索引读不到: 索.读到 ? null : 索.因,     // **读不到不画成空**（设计原则五）
     坏行: 索.坏行 || 0,
+    // 一班都没有时，说清是哪一种「没有」：没配 / 配空了 / 文件读坏了。
+    // 这三种在屏上曾经完全同态，而它们要做的事正相反。
+    无班因: 配表.length ? null : (配表.因 || '班次.json 里一个班次都没有 —— 定点上工是关着的'),
   };
 }
 
@@ -940,10 +943,25 @@ const 班次配档 = () => path.join(终端根, '班次.json');
  * 兼容旧写法不是为了「以防万一」——盘上那份现在就是旧写法，而 02:00 那班马上要跑，
  * 换个读法就把它读没了。**改格式时先让旧格式继续能跑，再迁移。**
  */
-function 读班次配() {
+function 读班次配(档 = 班次配档()) {
+  // **「没配」与「读坏了」不是同一件事。**首版两条都 `return []`，
+  // 于是页面上 (a) 没有配置文件 / (b) JSON 写坏了 完全同态——
+  // 而这两件事该做的动作正相反：前者是「你还没开定点上工」，
+  // 后者是「你开了，但它今晚一班都不会跑，去看那个文件」。
+  // 数组上挂一个不可枚举的 因，调用方要说人话时取得到，别的地方当它不存在。
+  const 带因 = (arr, 因) => {
+    Object.defineProperty(arr, '因', { value: 因, enumerable: false, configurable: true });
+    return arr;
+  };
+  let 原;
+  try { 原 = fs.readFileSync(档, 'utf8'); }
+  catch (e) {
+    // 没有配置文件 = 不定点上工。**缺省关，不缺省开。**
+    return 带因([], e && e.code === 'ENOENT' ? '没有 班次.json —— 定点上工是关着的' : `班次.json 读不动（${(e && e.code) || '未知'}）`);
+  }
   let j;
-  try { j = JSON.parse(fs.readFileSync(班次配档(), 'utf8')); }
-  catch { return []; }              // 没有配置文件 = 不定点上工。**缺省关，不缺省开。**
+  try { j = JSON.parse(原); }
+  catch (e) { return 带因([], `班次.json 解不开：${String((e && e.message) || e).slice(0, 80)} —— 今晚一班都不会跑`); }
   const 一条 = (o) => ({
     启用: o.启用 !== false,
     到点: String(o.到点 || ''),
@@ -956,7 +974,11 @@ function 读班次配() {
     班次: String(o.班次 || '班次'),
     话: String(o.话 || ''),
   });
-  if (Array.isArray(j && j.班次表)) return j.班次表.filter(Boolean).map(一条);
+  if (Array.isArray(j && j.班次表)) {
+    const 表 = j.班次表.filter(Boolean).map(一条);
+    // 文件在、格式对、但表是空的——这是第三种「一班都不跑」，与前两种又不一样
+    return 表.length ? 表 : 带因([], '班次.json 里的 班次表 是空的 —— 定点上工没有任何一班');
+  }
   return [一条(j)];
 }
 
@@ -1300,7 +1322,7 @@ function start(首选 = 端口) {
 // 不导出的话这条判据就只能 grep 源码，那不算判据（H104）。
 // 席档名/会话档于 导出是为了**够得着判据**：它们决定私聊的记忆落在哪个文件上，
 // 而 H104 的口径是判据要验行为——不导出的话只能 grep 源码文本，那不算判据。
-module.exports = { start, app, 坐席选项, 席档名, 会话档于, 会话档 };
+module.exports = { start, app, 坐席选项, 席档名, 会话档于, 会话档, 读班次配 };
 
 // 直接 node server.js 跑时照常起（壳里走 start()，不重复挂）
 if (require.main === module) start().catch((e) => { console.error('起不来：', e.message); process.exit(1); });

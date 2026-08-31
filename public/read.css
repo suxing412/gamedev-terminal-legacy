@@ -99,6 +99,30 @@ body, .视图 {
 .filters label { color: var(--ink-3); font-size: 13px; }
 .filters select, .filters input { font: inherit; font-size: 13px; }
 
+/* 清掉筛选。**只在真的筛着东西时才出现**——常驻一个灰按钮是背景噪音，
+   而它一出现就说明「你现在看到的不是全部」。 */
+.f-clr {
+  font: inherit; font-size: 12px;
+  color: var(--ink-2); background: var(--raised);
+  border: 1px solid var(--line); border-radius: 6px;
+  padding: 3px var(--s3); cursor: pointer;
+  transition: background 160ms cubic-bezier(0.16, 1, 0.3, 1), color 160ms;
+}
+.f-clr:hover { background: color-mix(in oklch, var(--raised) 70%, var(--line)); color: var(--ink); }
+.f-clr:focus-visible { outline: 2px solid var(--gate); outline-offset: 2px; }
+
+/* 筛完一条不剩。**这一页原来到这一步是一整片空白**——除了筛选栏什么都没有，
+   唯一的信号是右端 11px 的「0 条（共 33）」。
+   空白在值班屏上永远读作「它坏了」，而这里其实是「你把它们全挡住了」。 */
+.f-empty {
+  margin: calc(-1 * var(--s4)) 0 var(--s5);
+  padding: var(--s4);
+  font-size: 13px; line-height: 1.7; color: var(--ink-2);
+  background: var(--panel);
+  border: 1px dashed var(--line); border-radius: 8px;
+}
+.f-empty[hidden] { display: none; }
+
 /* 下拉与复选框是**没画过的浏览器表面**。
    不画的话它们带着操作系统的箭头、边框与勾选色进来，
    而那套东西不属于这块屏的任何一个色阶——一眼就看得出是「组装的」不是「做的」。

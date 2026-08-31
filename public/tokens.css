@@ -38,3 +38,35 @@
 
   --z-tip: 10; --z-toast: 20;
 }
+
+/* ── 浏览器自带的那几处表面：**只在这里定义一次** ────────────────
+ *
+ * 选区、光标、滚动条、焦点圈——不管它们，页面就只做了一半。
+ * 但它们是**全局**的，而这个项目有七张样式表、其中六张会被主壳同时预载，
+ * 于是「全局规则写在某一页的样式表里」这件事在这里的代价特别高。
+ *
+ * 案发 2026-08-31：`班次.css` 里有一行 `* { scrollbar-width: thin }`。
+ * Chromium 的规矩是——**`scrollbar-width` 一旦不是 auto，
+ * 该元素的 `::-webkit-scrollbar` 伪元素整族被忽略**。
+ * 那一行于是杀掉了它自己下面四行，也杀掉了 style.css 里那四行，
+ * 而 index.html 预载它，所以主壳三栏、五张视图页、编辑器内部——**无一幸免**。
+ * 更贵的是它旁边那句注释：main.js 里写着「Fluent 滚条不吃 ::-webkit-scrollbar，
+ * 所以关掉该特性」——实测那个开关无效，真凶是自家这个 `*`。
+ * **一个已经被证伪的解释，比没有解释贵得多**：它会让下一个人不去看真凶。
+ *
+ * 所以：滚动条只在这里写一次，且**不在 Chromium 上设 scrollbar-width**。
+ * 标准属性留给认不得 `::-webkit-scrollbar` 的引擎（Firefox），用 @supports 分开。 */
+::selection { background: var(--gate-wash); color: var(--ink); }
+:root { caret-color: var(--gate); accent-color: var(--gate); }
+:focus-visible { outline: 2px solid var(--gate); outline-offset: 2px; border-radius: 3px; }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; border: 2px solid var(--ground); }
+::-webkit-scrollbar-thumb:hover { background: var(--raised); }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* 认不得 webkit 那族伪元素的引擎才走标准属性。
+   **不能无条件写**——在 Chromium 上它会把上面四行整族关掉。 */
+@supports not selector(::-webkit-scrollbar) {
+  * { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+}

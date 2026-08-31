@@ -25,6 +25,7 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const { spawn, spawnSync } = require('child_process');
+const net = require('net');
 
 const 退避表 = [0, 30000, 120000];   // 第 1/2/3 次之间等多久
 const 上限 = 退避表.length;
@@ -40,13 +41,30 @@ function 跑(cmd) {
   return { 码: r.status, 出: String((r.stdout || '') + (r.stderr || '')).trim() };
 }
 
-/** 端口有没有人在听。用 netstat 而不是试连——试连拿不到「端口空着」与「连上了但不应答」的区别。 */
+/**
+ * 端口有没有人在听 → Promise<boolean>。
+ *
+ * **试绑，不是试连，也不再起 cmd.exe。**
+ *   · 试连（connect）拿不到「端口空着」与「连上了但不应答」的区别——这是原注释说对的那半。
+ *   · 但原实现是 `spawnSync('cmd.exe', ['netstat -ano | findstr …'])`：
+ *     每 60 秒起一个 cmd 进程、跑一遍全表 netstat，**同步**，实测把事件循环冻约 90ms。
+ *     这块屏整天开着，那就是每小时 5.4 秒的定时卡顿，而它只为回答一个布尔。
+ *   · 试绑（listen）回答的正是要问的那件事：EADDRINUSE ＝ 有人占着这个端口，
+ *     不管它应不应答。纯 Node，无子进程，实测微秒级。
+ *
+ * 探不动就当没占——宁可多探一次，不可误判成活着。
+ */
 function 端口占用(口) {
-  try {
-    const r = spawnSync('cmd.exe', ['/d', '/s', '/c', `netstat -ano -p tcp | findstr LISTENING | findstr :${口}`],
-      { encoding: 'utf8', windowsHide: true });
-    return String(r.stdout || '').trim().length > 0;
-  } catch { return false; }   // 探不动就当没占——宁可多探一次，不可误判成活着
+  return new Promise((res) => {
+    const n = Number(口);
+    if (!Number.isFinite(n) || n <= 0) return res(false);
+    const s = net.createServer();
+    let 完 = false;
+    const 收 = (v) => { if (!完) { 完 = true; try { s.close(); } catch (e) { /* 已关 */ } res(v); } };
+    s.once('error', (e) => 收(!!(e && (e.code === 'EADDRINUSE' || e.code === 'EACCES'))));
+    s.once('listening', () => 收(false));      // 绑上了 ⇒ 本来没人占
+    try { s.listen(n, '127.0.0.1'); } catch (e) { 收(false); }
+  });
 }
 
 /** pid 还在不在。EPERM = 进程在但不归我管，也算活着。 */
@@ -84,7 +102,7 @@ async function 真死了(目标) {
   const 证 = { 端口: null, 进程: null, HTTP: null };
 
   if (目标.端口) {
-    证.端口 = 端口占用(目标.端口);
+    证.端口 = await 端口占用(目标.端口);
     if (证.端口) {
       // 端口有人听 → 再探一次 HTTP。通了当然活着；不通也**不判死**——
       // 可能只是卡住，这时起第二个实例会撞端口，两个都废。

@@ -103,6 +103,12 @@ test('守④ **/api/events 读的是本地月那一份**（造两份 log，看�
     const 全文 = JSON.stringify(j);
     assert.ok(全文.includes('本地月那一份'),
       `没读到本地月（${本地}）那一份。实得：${全文.slice(0, 300)}`);
+    // **日期要真的发下来**（前端编不出「今天是哪天」，也编不出每一行是哪天的）。
+    // 窗口是 600 行 ≈ 58 小时，只发 HH:MM 的话时刻在屏上会局部递减。
+    assert.strictEqual(j.今日, 读数.本地日(此刻), '/api/events 没告诉前端今天是哪天');
+    assert.ok(Array.isArray(j.事) && j.事.length, '没有事件');
+    assert.match(String(j.事[0].日 || ''), /^\d{4}-\d{2}-\d{2}$/, '事件行没带日期：' + JSON.stringify(j.事[0]));
+    assert.match(String(j.事[0].时 || ''), /^\d{2}:\d{2}$/);
     if (UTC !== 本地) {
       assert.ok(!全文.includes('UTC 月那一份'),
         `**读成了 UTC 月（${UTC}）那一份**——正是那八小时里屏上会显示的东西`);

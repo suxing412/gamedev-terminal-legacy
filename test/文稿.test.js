@@ -425,6 +425,41 @@ test('守⑲c 记号缓存按 mtime 命中，文件变了要重数', () => {
     '文件改了但缓存没失效——屏上会一直说它没记号');
 });
 
+test('守⑲d **淘汰的是「本轮没见到的」，不是「插得早的」**（FIFO 会在 2000 上撞断崖）', () => {
+  // 原来是「超过 2000 就只留最后 1200 条」。那是 FIFO 不是 LRU——
+  // 命中缓存时不重新 set，插入序就是列举序，于是文件数一过 2000：
+  // 每轮淘汰掉固定的那 800 条 → 下一轮把它们重读一遍重新插到末尾 → 再淘汰另外 800 条。
+  // **每次列举从「读 0 个文件」跳成「读 800 个」，而且永远回不去。**
+  const 目 = fs.mkdtempSync(path.join(os.tmpdir(), '淘-'));
+  for (let i = 0; i < 6; i++) fs.writeFileSync(path.join(目, `n${i}.md`), '这段要改【改】\n', 'utf8');
+  const 根 = [{ 键: 'du', 名: '独', 路: 目, 写: true }];
+  const 缓 = new Map();
+
+  let 表 = 文稿.列举(根);
+  文稿.记号统计(表, { du: 目 }, 缓);
+  assert.strictEqual(缓.size, 6);
+
+  // 删掉两份 —— 它们的缓存条目必须跟着走，不能一直躺在 Map 里
+  fs.rmSync(path.join(目, 'n0.md'));
+  fs.rmSync(path.join(目, 'n1.md'));
+  表 = 文稿.列举(根);
+  文稿.记号统计(表, { du: 目 }, 缓);
+  assert.strictEqual(缓.size, 4, '删掉的文件还留在缓存里 —— 这块屏整天开着，那就是一处慢性泄漏');
+  assert.ok(![...缓.keys()].some((k) => k.endsWith('n0.md')), 'n0 的缓存条目没被清掉');
+
+  // 而**没删的那些一条都不许被淘汰**（否则下一轮要重读，就是那个断崖）
+  for (let i = 2; i < 6; i++) {
+    assert.ok([...缓.keys()].some((k) => k.endsWith(`n${i}.md`)), `n${i} 被误淘汰了`);
+  }
+  // 再跑一轮：全部命中，一次读盘都不该发生
+  const 快照 = new Map([...缓.entries()].map(([k, v]) => [k, v.记]));
+  文稿.记号统计(文稿.列举(根), { du: 目 }, 缓);
+  assert.strictEqual(缓.size, 4);
+  for (const [k, v] of 缓) assert.strictEqual(v.记, 快照.get(k), k + ' 被重算了（缓存没命中）');
+
+  fs.rmSync(目, { recursive: true, force: true });
+});
+
 // ── 五、读盘：换行与 BOM ───────────────────────────────────────────
 
 test('守⑳ 读盘认出 CRLF 与 LF（写回要照原样还原，否则一次保存全文件变改动行）', () => {

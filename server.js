@@ -317,6 +317,10 @@ app.get('/api/pulse', async (req, res) => {
 // 那种比对会因为无关的排版差异而红，而那种判据最后一定会被人关掉。
 const 事流 = require('./public/事流.js');
 
+// /api/events 的结果缓存。journal 是 append-only 的，绝大多数轮次它一个字节都没动，
+// 而这一口每 15 秒被打一次。见下面 statSync 那段注释。
+let 事件缓 = { 路: '', 改于: -1, 字节: -1, 答: null, 今日: '' };
+
 app.get('/api/events', (req, res) => {
   // **本地月，不是 UTC 月。**写侧（studio/lib/journal.js）按 d.getMonth()+1 分档；
   // 这里原来写的是 toISOString().slice(0,7)。UTC+8 下每月 1 号本地 00:00–07:59
@@ -325,6 +329,20 @@ app.get('/api/events', (req, res) => {
   const 月 = require('./server/lib/读数').本地月();
   const p = path.join(process.env.STUDIO_ROOT || 'D:/GitHub/AI-GameStudio/监制台', 'journal', 月 + '.log');
   try {
+    // **先 stat，没变就直接给上一次的结果。**
+    //
+    // 这一口每 15 秒被前端打一次，而它原本每次都同步读整份 journal（实测 3.00MB）
+    // 再对全文跑正则：12 小时 2880 次、约 35 秒事件循环冻结、8.6GB 走 GC。
+    // 而 journal 是 append-only 的——**只增不改**，绝大多数轮次它一个字节都没动。
+    // statSync 是微秒级的，读 3MB 是毫秒级的，两者差三个数量级。
+    const st = fs.statSync(p);
+    // **今日 也要进命中条件。**跨过午夜时文件可以一个字节都没动，
+    // 而「哪些行要标日期」这件事已经变了——只比 mtime 的话，
+    // 00:00 之后整栏会继续按昨天的口径显示，直到下一条 journal 写进来。
+    const 今日 = require('./server/lib/读数').本地日();
+    if (事件缓.路 === p && 事件缓.改于 === st.mtimeMs && 事件缓.字节 === st.size && 事件缓.今日 === 今日) {
+      return res.json(事件缓.答);
+    }
     const 全 = fs.readFileSync(p, 'utf8');
     // **在大窗口上折，再取前 N 组**——首版是 `.slice(-40)` 直接给前端。
     // 异厂评审 2026-08-31 的击杀：08:00 出现 `同步失败 code=401`，
@@ -345,7 +363,9 @@ app.get('/api/events', (req, res) => {
     // 一栏按时间倒序的流，如果它的时刻读起来不是单调的，那这一栏就不能信了。
     const 条 = 行.map((l) => ({ 日: l.slice(1, 11), 时: l.slice(12, 17), 文: l.slice(19) }));
     const 组 = 事流.折叠(条, { 上限: 60 });   // 折完 60 组就足够填满那一栏
-    res.json({ 事: 事流.脱种(组), 原始行数: 条.length, 今日: require('./server/lib/读数').本地日() });
+    const 答 = { 事: 事流.脱种(组), 原始行数: 条.length, 今日 };
+    事件缓 = { 路: p, 改于: st.mtimeMs, 字节: st.size, 答, 今日 };
+    res.json(答);
   } catch (e) {
     res.json({ 读不到: true, 因: e.code || e.message });
   }

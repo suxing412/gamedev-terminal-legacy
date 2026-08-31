@@ -210,8 +210,12 @@ test('端口占用判得准', async () => {
   await new Promise((k) => s.listen(0, '127.0.0.1', k));
   const 口 = s.address().port;
   try {
-    assert.equal(互保.端口占用(口), true);
-    assert.equal(互保.端口占用(59995), false);
+    // **端口占用 现在是异步的**（试绑，不再起 cmd.exe 跑 netstat）。
+    assert.equal(await 互保.端口占用(口), true);
+    assert.equal(await 互保.端口占用(59995), false);
+    // 非法值不许当成「占着」——那会让互保永远不敢扶
+    assert.equal(await 互保.端口占用(0), false);
+    assert.equal(await 互保.端口占用('不是数'), false);
   } finally { s.close(); }
 });
 

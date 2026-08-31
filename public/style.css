@@ -92,7 +92,11 @@ body {
    `.话流 { display: flex }` 是类选择器，盖过浏览器默认表里的 `[hidden] { display: none }`，
    于是切到视图时话流仍然画在屏上，两块内容叠着——JS 报 hidden=true，眼睛看见的却是两份。
    这类「属性设了但没生效」的错不报任何异常，只能靠看出来。 */
-.话流[hidden], .视图区[hidden] { display: none; }
+.话流[hidden], .视图区[hidden], .凭幅[hidden] { display: none; }
+/* .凭幅 是 2026-08-31 补进这条名单的：它自己有 `display:flex`（类选择器，
+   盖过浏览器默认表里的 `[hidden]{display:none}`），于是**平时也一直画着**——
+   一条 52.6px 高的空琥珀带，里面是一个空的 <code> 和一颗复制空串的按钮。
+   而这条横幅整个设计前提就是「平时完全不占位，一出现就说明该动手了」。 */
 
 /* ── 视图区：与话流互斥，占同一格 ──────────────────────────
    页签换的是这一格，不是整页。座条与说区在它上下方，不参与切换——
@@ -392,11 +396,8 @@ body {
 
 .读不到 { padding: var(--s4); color: var(--gate-deep); font-size: 12px; line-height: 1.5; }
 
-/* 滚动条：细、低对比，不参与视觉 */
-::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: var(--ink-3); }
-::-webkit-scrollbar-track { background: transparent; }
+/* 滚动条已归 tokens.css 一处定义（2026-08-31）——
+   两张表各画一套，早晚有一天只改一套。 */
 
 /* 常驻整天：任何动效都是打扰。降级到位 */
 @media (prefers-reduced-motion: reduce) {
@@ -472,7 +473,11 @@ body {
   .顶 { flex-wrap: wrap; row-gap: var(--s2); }
   .去 { order: 3; width: 100%; overflow-x: auto; scrollbar-width: none; }
   .去::-webkit-scrollbar { display: none; }
-  .顶况 > span:not(#顶闸):not(#顶钟) { display: none; }   /* 顶条只留最紧的两格 */
+  /* **按包裹的 span 点名，不按里面那个 <b> 点名。**
+     原来写的是 `:not(#顶闸)`，而 #顶闸 是 span 里面的 <b>——
+     直接子 span 里没有一个叫这个 id，于是这条 :not 从来没排除到任何东西，
+     800px 下真正留下的只有钟一格，被藏掉的正是「人闸 61」。 */
+  .顶况 > span:not(#顶闸格):not(#顶钟) { display: none; }   /* 顶条只留最紧的两格 */
 }
 
 /* 2K/4K 常驻屏：中栏的阅读列宽度是定的（汉字读起来 72ch 就够），多出来的横向空间

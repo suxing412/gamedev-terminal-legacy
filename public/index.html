@@ -49,7 +49,10 @@
     <nav class="去" id="去"></nav>
     <div class="顶况">
       <span><i class="脉" id="脉灯"></i> <span id="脉文">连接中</span></span>
-      <span>人闸 <b id="顶闸">—</b></span>
+      <!-- 包裹的 span 也要有 id：窄屏那条 `:not(#顶闸)` 选的是直接子 span，
+           而 #顶闸 是里面的 <b> —— 于是它从来没排除到任何东西，
+           800px 下被藏掉的正是「人闸 61」这一格（本屏最要紧的那个数）。 -->
+      <span id="顶闸格">人闸 <b id="顶闸">—</b></span>
       <span>在跑 <b id="顶跑">—</b></span>
       <span id="顶额">—</span>
       <span id="顶凭">—</span>

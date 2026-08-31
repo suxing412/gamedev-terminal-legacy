@@ -205,6 +205,70 @@ test('守①c **`.视图` 是所有视图共用的壳，谁都不许往它身上
     + '\n把选择器缩到自己那一页（例：`.视图:has(.你的根类)`）。');
 });
 
+test('守①d **单页样式表里不许出现全局选择器**（`*` / `:root` / 裸伪元素）', () => {
+  // 守①c 只扫「含 .视图 的选择器」，于是 2026-08-31 的这一条整个逃逸了：
+  // `班次.css` 里一行 `* { scrollbar-width: thin }`。
+  // Chromium 的规矩是 scrollbar-width 一旦不是 auto，该元素的 `::-webkit-scrollbar`
+  // 伪元素整族被忽略——那一行杀掉了它自己下面四行，也杀掉了 style.css 里那四行，
+  // 而 index.html 预载它：**主壳三栏、五张视图页、编辑器内部无一幸免**。
+  // 更贵的是它旁边那句已被证伪的解释（main.js 里的 Fluent 开关）：它让人不去看真凶。
+  //
+  // 口径：`*` / `:root` / `html` / `body` 裸写，以及裸的 `::selection`、
+  // `::-webkit-scrollbar*`、`:focus-visible` —— 这些全局表面只许写在 tokens.css 一处。
+  const 目 = path.join(__dirname, '..', 'public');
+  const 允许 = new Set(['tokens.css']);
+  const 主壳 = new Set(['style.css']);      // 主壳自己那份 `* { box-sizing }` 重置留给它
+  const 全局选 = /^(\*|:root|html|body)$/;
+  const 全局伪 = /^(::selection|::-webkit-scrollbar[a-z-]*(:hover)?|:focus-visible)$/;
+  // **卡在伤害上，不卡在「像不像全局选择器」上。**
+  // `* { box-sizing: border-box; margin: 0; padding: 0 }` 四张表各写了一遍——
+  // 那是幂等的重置，重复但不伤人；`@media (prefers-reduced-motion) * { transition: none }` 同理。
+  // 真会漏出去伤人的是两类：
+  //   ① 滚动条：写在 `*` 上会把全项目的 ::-webkit-scrollbar 整族关掉（本案）；
+  //   ② 布局与滚动：给别人的 html/body 钉高度、关滚动、变 flex（与守①c 同一条口径）。
+  // 判据卡宽了会把三张无辜的表判红，而一条老是误报的判据最后一定会被人关掉。
+  const 伤人属性 = /(^|[;{\s])(scrollbar-(width|color)|overflow(-[xy])?|height|display|position)\s*:/;
+  const 犯2 = [];
+  for (const f of fs.readdirSync(目).filter((x) => x.endsWith('.css') && !允许.has(x))) {
+    const s2 = fs.readFileSync(path.join(目, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    for (const 块 of s2.split('}')) {
+      const i = 块.indexOf('{');
+      if (i < 0) continue;
+      const 选 = 块.slice(0, i).replace(/^[\s\S]*\{/, '').trim();   // 落在 @media 里的取内层
+      const 体 = 块.slice(i + 1);
+      if (!选 || 选.startsWith('@')) continue;
+      for (const 一 of 选.split(',').map((x) => x.trim())) {
+        // 裸的全局表面伪元素：一律只许在 tokens.css（重复定义早晚会各画各的）
+        if (全局伪.test(一)) { 犯2.push(`${f}: ${一}  →  全局表面只写在 tokens.css`); continue; }
+        if (主壳.has(f)) continue;                      // 主壳自己的重置留给它
+        if (全局选.test(一) && 伤人属性.test(体)) {
+          犯2.push(`${f}: ${一}  →  ${体.trim().slice(0, 48)}`);
+        }
+      }
+    }
+  }
+  assert.deepStrictEqual(犯2, [],
+    '这些单页样式表里写了全局选择器，而每张表都会被 index.html 预载——\n'
+    + '**它们在整个项目上生效**：\n  ' + 犯2.join('\n  ')
+    + '\n全局表面（选区/光标/滚动条/焦点圈）只写在 public/tokens.css 一处。');
+});
+
+test('守①e 滚动条只在 tokens.css 定义一次，且不在 Chromium 上设 scrollbar-width', () => {
+  const 目 = path.join(__dirname, '..', 'public');
+  const t = fs.readFileSync(path.join(目, 'tokens.css'), 'utf8');
+  assert.match(t, /::-webkit-scrollbar \{/, 'tokens.css 里没有滚动条定义');
+  const 去注 = t.replace(/\/\*[\s\S]*?\*\//g, '');
+  const i = 去注.indexOf('scrollbar-width');
+  if (i >= 0) {
+    // scrollbar-width 只许活在 @supports not selector(::-webkit-scrollbar) 里面：
+    // 它一旦无条件生效，就会把上面那族 ::-webkit-scrollbar 全部关掉（Chromium 的规矩）。
+    const 前 = 去注.slice(0, i);
+    const 支 = 前.lastIndexOf('@supports not selector(::-webkit-scrollbar)');
+    assert.ok(支 >= 0, '**tokens.css 里的 scrollbar-width 不在 @supports 保护之下**');
+    assert.ok(!前.slice(支).includes('}'), 'scrollbar-width 落在 @supports 块之外了');
+  }
+});
+
 test('守①b **生产前端不许用 alert/confirm/prompt**（Electron 壳内静默哑弹）', () => {
   // 换装仪式第⑨条。这个项目为它中招过两次（confirm 十连哑弹、prompt 四连哑弹），
   // 两次都是**浏览器预览里一切正常**——所以这条只能靠守卫，测不出来。

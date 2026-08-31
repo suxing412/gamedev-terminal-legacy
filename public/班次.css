@@ -31,17 +31,12 @@ body, .视图 {
   min-height: 100%;
 }
 
-/* ── 浏览器自带的那几处也归这套系统管 ──
-   选区、光标、滚动条、焦点圈、下划线间距——不管它们，等于页面只做了一半。 */
-::selection { background: var(--gate-wash); color: var(--ink); }
-:root { caret-color: var(--gate); accent-color: var(--gate); }
-* { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
-*::-webkit-scrollbar { width: 10px; height: 10px; }
-*::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; border: 2px solid var(--ground); }
-*::-webkit-scrollbar-thumb:hover { background: var(--raised); }
-*::-webkit-scrollbar-track { background: transparent; }
+/* 选区、光标、滚动条、焦点圈这几处**全局表面已挪进 tokens.css**（2026-08-31）。
+   它们原本写在这一页的样式表里，而主壳会预载这张表——于是这一页的规则
+   在整个项目上生效。其中 `* { scrollbar-width: thin }` 更是把
+   全项目的 `::-webkit-scrollbar` 整族关掉了（Chromium 的规矩，见 tokens.css 那段注释）。
+   **一张页面的样式表里不许再出现全局选择器。**判据 守①d 盯着这条。 */
 a { color: inherit; text-underline-offset: 3px; }
-:focus-visible { outline: 2px solid var(--gate); outline-offset: 2px; border-radius: 3px; }
 
 .wrap, .视图 { padding: var(--s5) var(--s5) var(--s6); max-width: 1500px; margin: 0 auto; }
 

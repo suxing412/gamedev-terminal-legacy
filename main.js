@@ -63,12 +63,19 @@ const { app, BrowserWindow, shell, ipcMain, screen } = require('electron');
 // 抢不到单实例锁、马上要退出的那一份，不该先把端口占了。
 const start = (...a) => require('./server').start(...a);
 
-// Win11 Fluent 滚条不吃 ::-webkit-scrollbar 自定义（监制台 0.30.6 案：
-// 细滚条样式在壳里从未生效过，页面上永远是带箭头的原生粗条）——关掉该特性。
-if (app && app.commandLine) app.commandLine.appendSwitch('disable-features', 'FluentScrollbar,FluentOverlayScrollbar');
+// 这里原本关着 FluentScrollbar/FluentOverlayScrollbar，注释断言
+// 「Fluent 滚条不吃 ::-webkit-scrollbar 自定义，所以关掉该特性」。
+// **2026-08-31 实测：那个开关无效，真凶是自家 班次.css 里的一行
+// `* { scrollbar-width: thin }`**——Chromium 的规矩是 scrollbar-width 一旦不是 auto，
+// 该元素的 ::-webkit-scrollbar 伪元素整族被忽略；而那张表被主壳预载，于是全项目失效。
+// 真因已在 tokens.css 处修掉，这个开关连同它那句解释一起删。
+// **一个已经被证伪的解释，比没有解释贵得多**：它会让下一个人不去看真凶。
 
 let win = null;
 let 端口 = null;
+// 全屏工作台的最小尺寸。**只此一处**——半屏塔要临时松开它再装回去，
+// 两处各写一个数就一定会有一天只改了一个。
+const 窗最小 = [1100, 640];
 
 async function createWindow() {
   const r = await start();
@@ -77,7 +84,8 @@ async function createWindow() {
   win = new BrowserWindow({
     width: 1600,
     height: 1000,
-    minWidth: 1100,          // 三栏在这个宽度以下会挤，低于它不如让人拖大
+    minWidth: 窗最小[0],      // 三栏在这个宽度以下会挤，低于它不如让人拖大
+    minHeight: 窗最小[1],
     title: '游戏开发者终端',
     autoHideMenuBar: true,
     backgroundColor: '#181a1d',   // ≈ style.css 的 --ground，暗色启动不闪白
@@ -132,14 +140,36 @@ async function createWindow() {
     if (开) {
       if (win.isFullScreen()) win.setFullScreen(false);
       if (win.isMaximized()) win.unmaximize();
+      // **先松开 minWidth，再 setBounds。**
+      //
+      // minWidth: 1100 会**静默钳位** setBounds——半屏塔从来就没窄过。
+      // 实测（2026-08-31）：窗口成了宽 1100、右边 640px 挂在屏幕外、且置顶；
+      // 页面按 1086px 排版，特意保留的 #顶闸格 / #顶钟 落在 x 878/947 全在屏外，
+      // 形态钮落在 x 1018 —— **点不着，回不去全屏**。全链条零报错，
+      // 而浏览器预览复现不了（浏览器没有 minWidth）。
+      // style.css 里那段「塔态收起页签导航」的全部理由，也押在这个从未生效的形态上。
+      win.setMinimumSize(360, 200);
       const w = Math.max(360, Math.min(460, Math.round(wa.width * 0.22)));
       win.setBounds({ x: wa.x + wa.width - w, y: wa.y, width: w, height: wa.height });
       win.setAlwaysOnTop(true, 'normal');
     } else {
       win.setAlwaysOnTop(false);
+      win.setMinimumSize(窗最小[0], 窗最小[1]);   // 回全屏，把三栏的下限装回去
       win.maximize();
     }
   });
+
+  // **接住 will-prevent-unload。**
+  //
+  // 文稿台编辑器一脏就挂 beforeunload。浏览器里这会弹一个原生确认框，
+  // 而 Electron 是问主进程 `will-prevent-unload`——**没人接就默认拒绝卸载**：
+  // Ctrl+R 不重载、关窗按钮不关窗、**不弹框、不报错、页面连闪都不闪**。
+  // 这台机器 08-30 刚发生过「ESC 失灵、重启换键盘都没用」的同族事故，
+  // 下一次撞上这个，第一反应大概率还会往「键盘/系统坏了」的方向找。
+  //
+  // 未存的内容不靠这个对话框保——它有 800ms 的服务端草稿兜着（文稿.js 的续草）。
+  // 所以这里一律放行：**宁可让他重载，也不要让一个按钮看起来是坏的。**
+  win.webContents.on('will-prevent-unload', (e) => { e.preventDefault(); });
 
   // 换版必清缓存（监制台 0.17.2 实测）：asar 文件 mtime 恒定 + Chromium 磁盘缓存跨重启持久
   // → 换了新版却还是旧 UI，且看不出任何异常。

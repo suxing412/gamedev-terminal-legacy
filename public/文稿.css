@@ -3,7 +3,12 @@
  * 两处选择器都要写：独立打开这一页时是 body，被抠成片段塞进主页时是 .视图。
  * 这条不是可选的——read.css / watch.css / 班次.css 都这么写，漏了就是主页里排版塌掉。
  */
-html { height: 100%; }
+/* **只在独立打开这一页时给 html 定高。**
+   裸写 `html { height: 100% }` 会漏给整个项目——这张表被 index.html 预载，
+   于是它给所有页面的 html 钉了高度。用 :has() 缩到「页面上有文稿台」这一情形：
+   片段模式下主壳的 html 不受影响，独立页照旧拿到高度链。
+   （判据 守①d 盯着这条：单页样式表不许往 html/body/* 上写布局。） */
+html:has(body.页 .稿台) { height: 100%; }
 
 /* 独立打开这一页时，body 要成为一条竖直的 flex：顶栏定高，主体吃掉剩下的。
  *
@@ -140,16 +145,23 @@ body.页:has(.稿容), .视图:has(.稿容) {
 .筛钮:disabled { opacity: .35; cursor: default; }
 .筛钮.清 { margin-left: auto; border-color: transparent; text-decoration: underline; text-underline-offset: 2px; }
 
-/* 类别筛：横向可滚，不换行撑高——左栏本来就窄，这一排不该吃掉两行 */
+/* 类别筛：**换行，不横滚**。
+ *
+ * 原本是「横向可滚 + 藏滚动条」，理由写的是「左栏本来就窄，这一排不该吃掉两行」。
+ * 实测（2026-08-31）：七颗钮 scrollWidth 525，而这一栏 clientWidth 299——
+ * **有三颗完全在栏外**，滚动条被 `scrollbar-width: none` 关掉、滚轮推不动
+ * （它是横向溢出，鼠标滚轮默认推纵向）、也没有任何溢出提示。
+ * 于是「按类别筛」这个功能，有三类是点不到的。
+ *
+ * 省下的那一行高度，换来的是三个筛不掉的类别。这笔账不划算。
+ * 换行与两行之上的 `.稿筛` 一致（那一行本来就是 flex-wrap: wrap）。 */
 .类筛 {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   padding: 5px var(--s3);
-  overflow-x: auto;
-  scrollbar-width: none;
   border-bottom: 1px solid var(--line-soft);
 }
-.类筛::-webkit-scrollbar { display: none; }
 
 .稿计 {
   padding: 6px var(--s3);

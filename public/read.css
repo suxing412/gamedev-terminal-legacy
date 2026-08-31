@@ -1,0 +1,171 @@
+@import url("tokens.css");
+
+/* read.css — 日报页 / 原始流页 / 空态（M1c）
+ *
+ * 与坐席同一套令牌，但**取向相反的一条**：坐席是值班屏，整页不滚、信息永远在位；
+ * 这两张是阅读页，正文可能几百行，整页必须能滚。所以 read.css 不继承 style.css，
+ * 只共享 tokens.css——共享的是色阶与节奏，不是布局纪律。
+ *
+ * A5 布局纪律（M3 装壳时要用到）：关键宽度用 **grid + 定宽**，不靠嵌套 flex 撑。
+ * 壳内 Chromium 124 算错嵌套 flex 的宽且只在 exe 里复现（ai-vault 坑档案），
+ * 现在写对，届时零返工。
+ *
+ * 行长压在 68ch：正文是中英混排的长段落，一行拉满 1920 宽的屏读起来眼睛要回扫两次。
+ */
+
+html { color-scheme: dark; }
+body, .视图 {
+  background: var(--ground);
+  color: var(--ink);
+  font: 400 15px/1.7 var(--sans);
+  font-feature-settings: "tnum" 1;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100%;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── 头部：三格 grid（品牌 | 页签 | 翻页），定宽两侧、中间自适应 ── */
+.top {
+  display: grid;
+  grid-template-columns: 260px 1fr 200px;
+  align-items: center;
+  gap: var(--s4);
+  padding: var(--s3) var(--s5);
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  position: sticky; top: 0; z-index: 5;
+}
+.brand { font-weight: 600; letter-spacing: -0.01em; }
+.brand .d { color: var(--ink-3); font: 400 13px var(--mono); margin-left: var(--s2); }
+.tabs { display: grid; grid-auto-flow: column; grid-auto-columns: max-content; gap: var(--s1); justify-content: center; }
+.tab {
+  display: block; padding: var(--s1) var(--s3); border-radius: 6px;
+  color: var(--ink-2); text-decoration: none; font-size: 13px;
+}
+.tab:hover { background: var(--raised); color: var(--ink); }
+.tab.on { background: var(--raised); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+/* 回主页：和四个页签同排但不是同一类——它是出口不是切换。
+   用一道竖线隔开，避免读成「第五个页签」。
+   2026-08-29：这条本该在查出「阅读页回不去坐席」那天就修，我画了图没写码，欠了一天。 */
+.tab.back { color: var(--ink-2); margin-right: var(--s2); padding-right: var(--s3); border-right: 1px solid var(--line); border-radius: 0; }
+.tab.back:hover { background: transparent; color: var(--ink); }
+.pager { display: grid; grid-auto-flow: column; gap: var(--s2); justify-content: end; }
+.nav { color: var(--ink-2); text-decoration: none; font-size: 13px; padding: var(--s1) var(--s2); border-radius: 6px; }
+.nav:hover { background: var(--raised); color: var(--ink); }
+/* 禁用态靠**色阶**区分（--ink-2 → --ink-3），不叠 opacity。
+ * 原本写了 0.45，量出来那一行等于把已经过线的 5.96 又打对折——
+ * 「浅灰显高级」是本仓已经栽过一次的坑（坐席 --ink-3 从 0.55 抬到 0.66 那次）。
+ * 禁用不等于要让人看不见：它只需要看起来点不动。 */
+.nav.off { color: var(--ink-3); cursor: default; }
+
+.wrap, .视图 { padding: var(--s6) var(--s5) 96px; max-width: 1100px; margin: 0 auto; }
+
+/* ── V1 日报 ── */
+.digest { max-width: 68ch; }
+.digest h1 { font-size: 26px; font-weight: 650; letter-spacing: -0.02em; margin: 0 0 var(--s3); text-wrap: balance; }
+.digest h2 {
+  font-size: 15px; font-weight: 600; color: var(--ink-2);
+  margin: var(--s6) 0 var(--s3); padding-bottom: var(--s2);
+  border-bottom: 1px solid var(--line-soft);
+}
+.digest h3 { font-size: 14px; font-weight: 600; margin: var(--s5) 0 var(--s2); }
+.digest blockquote { color: var(--ink-3); font-size: 13px; margin: 0 0 var(--s5); }
+.digest p { margin: 0 0 var(--s3); text-wrap: pretty; }
+.digest ul { list-style: none; }
+.digest > ul > li { margin: 0 0 var(--s5); }
+.digest > ul > li > ul { margin: var(--s2) 0 0; }
+.digest > ul > li > ul > li { color: var(--ink-2); font-size: 14px; margin: 0 0 var(--s2); padding-left: var(--s3); border-left: 1px solid var(--line-soft); }
+.digest a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--line); }
+.digest a:hover { border-bottom-color: var(--ink-2); }
+.digest code { font: 400 12.5px var(--mono); color: var(--ink-3); }
+.digest em { font-style: normal; color: var(--ink-3); }
+.meta { color: var(--ink-3); font-size: 13px; margin: 0 0 var(--s5); }
+.meta a { color: var(--ink-2); }
+
+/* ── V2 原始流 ── */
+.filters {
+  display: grid; grid-auto-flow: column; grid-auto-columns: max-content;
+  gap: var(--s4); align-items: center;
+  padding: var(--s3) var(--s4); margin: 0 0 var(--s5);
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+}
+.filters label { color: var(--ink-3); font-size: 13px; }
+.filters select, .filters input { font: inherit; font-size: 13px; }
+.filters select {
+  background: var(--raised); color: var(--ink); border: 1px solid var(--line);
+  border-radius: 6px; padding: 3px var(--s2); margin-left: var(--s1);
+}
+.filters .ck { display: inline-flex; align-items: center; gap: var(--s1); cursor: pointer; }
+.filters .count { color: var(--ink-3); font: 400 12px var(--mono); justify-self: end; }
+
+.grp { margin: 0 0 var(--s6); }
+.grp h2 { font-size: 14px; font-weight: 600; color: var(--ink-2); margin: 0 0 var(--s3); }
+.grp h2 .n { color: var(--ink-3); font: 400 12px var(--mono); margin-left: var(--s2); }
+.items { list-style: none; display: grid; gap: 1px; background: var(--line-soft); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+/* min-width:0 是 grid 子项的必需品：默认 min-width:auto 让子项以内容宽为下限，
+ * 一条不带空格的长英文标题就能把整格顶宽。这里的容器还带 overflow:hidden（为圆角），
+ * 于是溢出不表现为横滚**而是直接被剪掉**——看起来像「标题写得短」，实际是没显示全。
+ * 375 宽实测：条目右边缘到 387/405，剪掉十几到三十像素。 */
+.item { background: var(--panel); padding: var(--s3) var(--s4); min-width: 0; }
+.item[hidden] { display: none; }
+.item .row { max-width: 78ch; min-width: 0; overflow-wrap: anywhere; }
+.item .t { color: var(--ink); text-decoration: none; font-weight: 500; }
+.item a.t:hover { text-decoration: underline; }
+/* 元信息行**要能换行**：档位/源/时刻/分数/徽章五格在窄屏排不下。
+ * 这里用 flex 而不是 grid 列——A5 的「禁嵌套 flex 撑宽」管的是承重宽度，
+ * 而这一行是叶子级元信息，宽度由父级定死、它只负责折行，不参与撑宽。 */
+.sub {
+  display: flex; flex-wrap: wrap;
+  gap: var(--s1) var(--s3); align-items: center; margin-top: var(--s1);
+  color: var(--ink-3); font: 400 12px var(--mono);
+}
+.tier { display: inline-block; min-width: 18px; text-align: center; border-radius: 3px; background: var(--raised); color: var(--ink-2); }
+.tier.tS { color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+.badge {
+  color: var(--gate-deep); background: var(--gate-wash);
+  padding: 0 var(--s2); border-radius: 3px; font-size: 11px;
+}
+.item details { margin-top: var(--s2); max-width: 72ch; }
+.item summary { color: var(--ink-3); font-size: 12px; cursor: pointer; }
+.item details p { color: var(--ink-2); font-size: 13.5px; margin-top: var(--s2); text-wrap: pretty; }
+.warn { color: var(--warn); font-size: 13px; margin: 0 0 var(--s4); }
+
+/* ── 空态：不留白屏 ── */
+.empty { max-width: 60ch; padding-top: var(--s6); }
+.empty h1 { font-size: 20px; font-weight: 600; margin: 0 0 var(--s3); }
+.hint { color: var(--ink-3); margin: 0 0 var(--s4); }
+.recent { list-style: none; display: grid; gap: var(--s1); }
+.recent a { color: var(--ink-2); text-decoration: none; font: 400 13px var(--mono); }
+.recent a:hover { color: var(--ink); }
+
+/* ── 群聊：两列 grid，坐席名单定宽、消息列承重 ── */
+.chat-layout { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: var(--s5); align-items: start; }
+.chat-roster, .chat-main { min-width: 0; }
+.chat-roster h1 { font-size: 14px; margin: 0 0 var(--s2); color: var(--ink-2); }
+.chat-roster ul, .chat-messages { list-style: none; }
+.chat-roster ul { display: grid; gap: 1px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.chat-seat { display: grid; gap: var(--s1); padding: var(--s2) var(--s3); background: var(--panel); }
+.chat-seat strong { font-size: 13px; }
+.chat-seat span:last-child { color: var(--ink-3); font-size: 12px; line-height: 1.5; }
+.phase { width: max-content; padding: 0 var(--s1); border-radius: 3px; color: var(--warn); background: color-mix(in oklch, var(--warn) 12%, transparent); font: 400 11px var(--mono); }
+.chat-note { margin: 0 0 var(--s3); color: var(--ink-3); font-size: 13px; }
+.chat-messages { display: grid; gap: 1px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--line-soft); }
+.chat-messages .empty { padding: var(--s5); background: var(--panel); }
+.chat-message { min-width: 0; padding: var(--s3) var(--s4); background: var(--panel); }
+.chat-message-meta { display: grid; grid-auto-flow: column; grid-auto-columns: max-content; gap: var(--s2); align-items: baseline; }
+.chat-message-meta strong { font-size: 13px; }
+.chat-message-meta time { color: var(--ink-3); font: 400 12px var(--mono); overflow-wrap: anywhere; }
+.chat-message p { margin-top: var(--s1); color: var(--ink-2); overflow-wrap: anywhere; white-space: pre-wrap; }
+.chat-form { display: grid; gap: var(--s2); margin-top: var(--s4); padding: var(--s3) var(--s4); border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.chat-form label, .chat-form output { color: var(--ink-3); font-size: 13px; }
+.chat-form textarea { width: 100%; resize: vertical; padding: var(--s2); color: var(--ink); background: var(--raised); border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+.chat-form button { padding: var(--s1) var(--s3); color: var(--ink); background: var(--raised); border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+.chat-form output { margin-left: var(--s2); }
+
+@media (max-width: 760px) {
+  .top { grid-template-columns: 1fr; gap: var(--s2); }
+  .tabs, .pager { justify-content: start; }
+  .filters { grid-auto-flow: row; grid-auto-columns: auto; gap: var(--s2); }
+  .wrap { padding: var(--s5) var(--s4) 72px; }
+  .chat-layout { grid-template-columns: 1fr; }
+}

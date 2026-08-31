@@ -1,0 +1,205 @@
+@import url("tokens.css");
+
+/* watch.css — 监视页
+ *
+ * Operate 取向：这不是仪表盘表演，是一块值班屏上的四格状态。
+ * 一屏装得下、不滚、密度靠 Datadog 那一路，排版克制照 Linear——
+ * 与坐席/阅读页共用 tokens.css，不另发明颜色。
+ *
+ * 一条贯穿全文件的纪律：**五个状态各有各的样子，且「读不到」不长得像「零」。**
+ * 把「不知道」画成一个具体的数，是这块屏能犯的最严重的错。
+ */
+
+html { color-scheme: dark; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body, .视图 {
+  background: var(--ground);
+  color: var(--ink);
+  font: 400 15px/1.6 var(--sans);
+  font-feature-settings: "tnum" 1;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100%;
+}
+
+.wrap, .视图 { padding: var(--s5) var(--s5) var(--s6); max-width: 1500px; margin: 0 auto; }
+
+/* ── 顶上的细状态带：管子（瞭望塔 / 监制台）──
+   它们平时永远绿。永远绿的东西不该占大面积——首版给了它们两张大卡，
+   等于把第一屏让给了不需要看的东西。收成一条，坏了才展开说该干什么。 */
+.wbar {
+  display: flex; flex-wrap: wrap; gap: var(--s4);
+  align-items: center;
+  padding: var(--s2) var(--s4);
+  margin-bottom: var(--s5);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.wbar-i { display: inline-flex; align-items: baseline; gap: var(--s2); min-width: 0; }
+.wbar-i b { font-size: 12.5px; font-weight: 500; color: var(--ink-2); }
+.wbar-i .s { font: 400 11px var(--mono); color: var(--ink-3); }
+.wbar-i .why { font: 400 11px var(--mono); color: var(--warn); overflow-wrap: anywhere; }
+.wbar-i .wdot { align-self: center; }
+.wbar-i.ok .s { color: var(--live); }
+.wbar-i.warn .s, .wbar-i.warn b { color: var(--warn); }
+.wbar-i.bad .s, .wbar-i.bad b { color: var(--gate-deep); }
+.wbar-i.unk .s { color: var(--ink-3); }
+
+/* 两列 grid：四格在 1440 宽下两行两列，窄屏落一列。
+   关键宽度用 grid 定轨而非嵌套 flex——壳内 Chromium 124 算错嵌套 flex 宽（ai-vault 坑档案）。 */
+.wgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: var(--s4);
+  align-items: start;
+}
+
+.wcell {
+  min-width: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: var(--s4) var(--s4) var(--s4);
+}
+.wcell-h {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--s2);
+  margin-bottom: var(--s2);
+}
+.wcell-h h2 { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+
+/* 状态灯：五态五色。「读不到」用中性灰而非红——它不是故障，是没读着，处置方式完全不同。 */
+.wdot { width: 8px; height: 8px; border-radius: 50%; background: var(--idle); }
+.wstate { font: 400 11px var(--mono); color: var(--ink-3); }
+.wcell.ok   .wdot { background: var(--live); }
+.wcell.warn .wdot { background: var(--warn); }
+.wcell.bad  .wdot { background: var(--gate-deep); }
+.wcell.unk  .wdot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-3); }
+.wcell.ok   .wstate { color: var(--live); }
+.wcell.warn .wstate { color: var(--warn); }
+.wcell.bad  .wstate { color: var(--gate-deep); }
+
+/* 不健康的格加一道左描边？——不。1px 以上的彩色侧边框是本仓禁项。
+   改成整格描边换色：同样一眼可辨，且不引入那条禁掉的装饰。 */
+.wcell.bad  { border-color: color-mix(in oklch, var(--gate-deep) 45%, var(--line)); }
+.wcell.warn { border-color: color-mix(in oklch, var(--warn) 35%, var(--line)); }
+
+/* 问：这一格回答你真会问的哪个问题。写在结论之上——
+   先让人知道这块在管什么，再给结论，否则一句「在岗」不知道是什么在岗。 */
+.wq { color: var(--ink-3); font-size: 12px; margin-bottom: var(--s1); }
+.wwhy { color: var(--ink-2); font-size: 13px; margin-bottom: var(--s3); overflow-wrap: anywhere; }
+
+/* 怎么办：只在这一格坏了的时候出现。
+   一个红灯而不说该干什么，等于把问题丢给人自己猜——那正是本仓提案里「缺出口」那一型。 */
+.wdo {
+  font-size: 12.5px; color: var(--ink-2); line-height: 1.65;
+  background: color-mix(in oklch, var(--warn) 8%, transparent);
+  border-radius: 6px; padding: var(--s2) var(--s3); margin-bottom: var(--s3);
+  overflow-wrap: anywhere;
+}
+.wdo b { color: var(--warn); font-weight: 500; margin-right: var(--s2); }
+
+/* 计数 + 清单：数字旁边必须有内容。光一个 7 点不动也看不懂 */
+.wcount { display: flex; align-items: baseline; gap: var(--s2); margin-bottom: var(--s3); }
+.wcount b { font: 500 30px/1 var(--mono); color: var(--ink); letter-spacing: -0.02em; }
+.wcount span { font-size: 12.5px; color: var(--ink-3); }
+.wok { color: var(--live); font-size: 13px; margin-bottom: var(--s3); }
+.wnote { color: var(--ink-3); font: 400 11px var(--mono); margin-top: var(--s2); }
+
+.wlist { list-style: none; display: grid; gap: 1px; background: var(--line-soft); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.wlist-i {
+  display: grid; grid-template-columns: 46px 74px minmax(0, 1fr);
+  gap: var(--s2); align-items: baseline;
+  padding: var(--s2) var(--s3); background: var(--panel); min-width: 0;
+}
+.wlist-i time { font: 400 11px var(--mono); color: var(--ink-3); }
+.wlist-i .k { font: 400 11px var(--mono); color: var(--ink-3); overflow-wrap: anywhere; }
+.wlist-i .txt { font-size: 12.5px; color: var(--ink-2); overflow-wrap: anywhere; }
+.wlist-i.urg .k { color: var(--gate); }
+
+/* 计数：大字只给真数。读不到时走 .unk，长得完全不一样 */
+.wnum { font: 500 40px/1 var(--mono); color: var(--ink); letter-spacing: -0.02em; }
+.unk {
+  font: 400 13px var(--sans);
+  color: var(--ink-3);
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+  padding: var(--s2) var(--s3);
+  display: inline-block;
+}
+.wbad { color: var(--warn); font: 400 12px var(--mono); margin-top: var(--s2); }
+
+.wbtn {
+  margin-top: var(--s3);
+  font: 400 12px var(--sans);
+  color: var(--ink-2);
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: var(--s1) var(--s3);
+  cursor: pointer;
+  transition: background 160ms cubic-bezier(0.16, 1, 0.3, 1), color 160ms;
+}
+.wbtn:hover { background: color-mix(in oklch, var(--raised) 70%, var(--line)); color: var(--ink); }
+.wbtn:focus-visible { outline: 2px solid var(--gate); outline-offset: 2px; }
+.wbtn[disabled] { color: var(--ink-3); cursor: default; background: var(--raised); }
+
+/* 事件流：等宽时刻 + 源标 + 正文三列，正文可折行 */
+.wev { list-style: none; display: grid; gap: 1px; background: var(--line-soft); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.wev-i {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: var(--s2);
+  align-items: baseline;
+  padding: var(--s2) var(--s3);
+  background: var(--panel);
+  min-width: 0;
+}
+.wev-i time { font: 400 11px var(--mono); color: var(--ink-3); }
+.wev-i .src { font: 400 11px var(--mono); color: var(--ink-3); }
+.wev-i .txt { font-size: 12.5px; color: var(--ink-2); overflow-wrap: anywhere; }
+.wev-i.urg .txt { color: var(--gate); }
+
+/* 源表：逐源一行。四列定轨——名字承重可折，其余三列定宽不抖。 */
+.wsrc { list-style: none; display: grid; gap: 1px; background: var(--line-soft); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.wsrc-i {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px 62px minmax(0, 150px);
+  gap: var(--s2);
+  align-items: baseline;
+  padding: var(--s2) var(--s3);
+  background: var(--panel);
+  min-width: 0;
+}
+.wsrc-i .n { font-size: 12.5px; color: var(--ink); overflow-wrap: anywhere; }
+.wsrc-i .t { font: 400 11px var(--mono); color: var(--ink-3); }
+.wsrc-i .c { font: 400 11px var(--mono); color: var(--ink-2); text-align: right; }
+.wsrc-i .e { font: 400 11px var(--mono); color: var(--warn); overflow-wrap: anywhere; }
+/* 整行不变色，只让失败那一格出声——整行染色会让「有一次失败」看起来像「这个源废了」 */
+.wsrc-i.bad .n { color: var(--ink); }
+
+.wfoot { margin-top: var(--s5); color: var(--ink-3); font: 400 12px var(--mono); }
+
+.werr { max-width: 60ch; border: 1px solid var(--line); border-radius: 10px; padding: var(--s5); background: var(--panel); }
+.werr h1 { font-size: 18px; font-weight: 600; margin-bottom: var(--s3); }
+.werr p { color: var(--ink-2); font-size: 13.5px; margin-bottom: var(--s2); }
+.werr .hint { color: var(--ink-3); font-size: 13px; }
+.werr code { font: 400 12.5px var(--mono); color: var(--ink-2); }
+
+/* 状态翻转时轻轻闪一下——这是唯一的动效，且只在**真的变了**时跑。
+   常驻整天意味着任何动效都是打扰：动一次就停，不循环。 */
+@keyframes wflip { from { background: color-mix(in oklch, var(--raised) 60%, var(--panel)); } to { background: var(--panel); } }
+.wcell.flip { animation: wflip 900ms cubic-bezier(0.16, 1, 0.3, 1) 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .wcell.flip { animation: none; }
+  .wbtn { transition: none; }
+}
+
+@media (max-width: 900px) {
+  .wrap { padding: var(--s5) var(--s4); }
+  .wev-i { grid-template-columns: 54px minmax(0, 1fr); }
+  .wev-i .src { display: none; }
+}

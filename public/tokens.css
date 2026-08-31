@@ -1,0 +1,40 @@
+/* tokens.css — 设计令牌唯一事实源
+ *
+ * 抽出来是因为阅读页（日报/原始流）要用同一套色阶与间距，
+ * 而它们不能继承 style.css 里那些坐席专属规则（尤其 html,body{overflow:hidden}——
+ * 值班屏整页不滚是对的，阅读页整页不滚是坏的）。
+ * 两边各抄一份色值＝两把尺，改一处漏一处；抽成一份，谁都别再自己写颜色。
+ */
+:root {
+  /* 底面三层：ground → panel → raised。层差极小（0.03 L），靠 hairline 分界而非阴影 */
+  --ground: oklch(0.155 0.006 255);
+  --panel: oklch(0.185 0.006 255);
+  --raised: oklch(0.215 0.007 255);
+  --line: oklch(0.28 0.008 255);
+  --line-soft: oklch(0.235 0.007 255);
+
+  /* 字阶三级，**每一级都过 4.5:1**——包括最弱那级。
+   * 弱级原本是 0.55，量出来 3.85（贴在人闸高亮行上更只有 3.27）：那是"浅灰显高级"的老陷阱，
+   * 而这块屏是给一双已经用了六小时的眼睛看的。抬到 0.66 后三级差仍有 0.15/0.12 L，层次不糊。 */
+  --ink: oklch(0.93 0.004 255);
+  --ink-2: oklch(0.78 0.006 255);
+  --ink-3: oklch(0.66 0.007 255);
+
+  /* 唯一强调色：值班灯的琥珀。只出现在人闸栏 */
+  --gate: oklch(0.78 0.145 72);
+  --gate-deep: oklch(0.66 0.175 45);
+  --gate-wash: oklch(0.78 0.145 72 / 0.10);
+
+  /* 状态色：仅用于产线脉搏的语义标记，克制到只有三档 */
+  --live: oklch(0.74 0.13 158);
+  --idle: oklch(0.62 0.007 255);
+  --warn: oklch(0.72 0.13 62);
+
+  --mono: "Cascadia Mono", "JetBrains Mono", Consolas, "Sarasa Mono SC", ui-monospace, monospace;
+  --sans: "Inter", "PingFang SC", "Microsoft YaHei UI", system-ui, -apple-system, sans-serif;
+
+  /* 间距节奏：4 的倍数，成体系不随手 */
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px;
+
+  --z-tip: 10; --z-toast: 20;
+}

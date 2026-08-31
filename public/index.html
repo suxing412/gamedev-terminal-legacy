@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>游戏开发者终端 · 坐席</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- 值班灯：琥珀点。内联 data URI，省一次请求也省一个 404 -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='5' fill='%23f0a63c'/%3E%3C/svg%3E">
+<!-- 各视图的样式表**排在 style.css 之前**：它们里面有 body 级排版规则，
+     独立打开那些页面时要生效；而在主页里 style.css 后加载即可盖掉 body 那条，
+     视图自己的排版则由 `.视图` 那半边选择器接住（见 read.css/watch.css/班次.css 的 `body, .视图`）。
+     顺序反了，主页的字体与底色会被阅读页的规则接管——那不是能靠改颜色补的错，是层叠顺序错。 -->
+<link rel="stylesheet" href="prose.css">
+<link rel="stylesheet" href="read.css">
+<link rel="stylesheet" href="watch.css">
+<link rel="stylesheet" href="班次.css">
+<link rel="stylesheet" href="存照.css">
+<link rel="stylesheet" href="文稿.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<!--
+  方向契约（impeccable · shape → craft，2026-08-26）
+
+  THESIS：一块全屏常驻的值班屏，把「等你拍板的 / 跟总监说话 / 产线在跑什么」三件事各安其位。
+    它拒绝的类别默认排布是「整屏一个聊天框」——那等于把 CLI 换个壳，人闸照样被信息流淹没。
+  OWN-WORLD：近黑带极低冷灰的三层底面，hairline 分界不用阴影；中性色铺满，**唯一强调色（值班琥珀）
+    只出现在人闸栏**；等宽字仅用于单号、时刻与数字列。排版手艺照 Linear，密度与状态色照 Datadog。
+  STORY：抬眼就知道谁在等我、产线活着没有；要拍板时转过来说话，不是点通过/不过。
+  FIRST VIEWPORT：左 340px 人闸队列（永不参与滚动，逾期越久越重），中栏对话收在 72ch，
+    右 300px 计数格+在跑+事件流。顶条一行报总况。
+  FORM：类别标准全力执行（制作人拍板的常设出口，非概念隐喻）；候选列表第 8 项之外的常设出口。
+    seed key b6baf444。
+  FINISH：unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
+-->
+<div class="台">
+
+  <header class="顶">
+    <div class="徽">游戏开发者终端<span>坐席 · 总监在岗</span></div>
+    <!-- 去别处的路。**这份列表不再手写**（2026-08-30 重做）。
+         原委：08-28 群聊上线当天从这个窗口根本走不过去——「东西做好了、跑起来了、
+         测试全绿，人却看不见它」。当时手工补了三个 <a>；然后 08-29 的监视、
+         08-30 的班次又各漏一次，因为服务端 页.js 那份改了、这份没改。
+         **两份手工列表必然分叉，而分叉的表现是「新页面看不见」，不报错。**
+         现在两处都从 /api/views 那一份表渲染，新增一页只改 server/render/页签.js。
+
+         而且不再整页跳转：点页签只换主内容区（话栏那一格），
+         闸栏、脉栏、顶况、输入框全部留在屏上——读一份班次报告不该让人闸队列消失。 -->
+    <nav class="去" id="去"></nav>
+    <div class="顶况">
+      <span><i class="脉" id="脉灯"></i> <span id="脉文">连接中</span></span>
+      <span>人闸 <b id="顶闸">—</b></span>
+      <span>在跑 <b id="顶跑">—</b></span>
+      <span id="顶额">—</span>
+      <span id="顶凭">—</span>
+      <span id="顶钟">—</span>
+      <button class="形态钮" id="形态钮" title="半屏塔 ⟷ 全屏工作台（F9）">半屏</button>
+    </div>
+  </header>
+
+  <!-- 凭据横幅：只在登录过期/临期时出现。常驻屏上多一条永久横幅就是背景噪音，
+       所以它平时完全不占位，一出现就说明该动手了，且直接给出那条命令。 -->
+  <div class="凭幅" id="凭幅" hidden>
+    <span id="凭文"></span>
+    <code id="凭令"></code>
+    <button id="凭抄">复制</button>
+  </div>
+
+  <aside class="闸栏">
+    <div class="栏头">
+      <h2>等你拍板</h2>
+      <span class="数" id="闸数">—</span>
+    </div>
+    <div class="闸列" id="闸列">
+      <div class="空态">读取中…</div>
+    </div>
+    <!-- 塔形态专用：脉栏收起后，「产线活着没有」这一条不能跟着丢 -->
+    <div class="塔况" id="塔况">—</div>
+  </aside>
+
+  <main class="话栏">
+    <!-- 在座条（2026-08-29 制作人拍板：主页面就是群聊，私聊是从群里分出去的支路）。
+         八席常驻可见；点名字开 1:1，群仍在左边看得见，头上有「回群」。 -->
+    <div class="座条" id="座条">
+      <div class="座组" id="座组"></div>
+      <span class="座注">点名字 → 私聊</span>
+    </div>
+    <div class="话流" id="话流">
+      <div class="话">
+        <div class="谁">总监</div>
+        <div class="文">屋里八席都在。有话直接说——不点名则相关席应答，@ 某席就只找那一位。
+
+左边是此刻等你拍板的事，按等待时长排；点任一条可以把它带进对话。右边是产线脉搏，读不到时会明说读不到，不会拿零糊弄你。</div>
+      </div>
+    </div>
+    <!-- 视图区：与话流互斥，占同一格。
+         **座条与说区不参与切换**——一边看班次报告一边说话是常态，
+         把输入框也换走等于「读东西时不能说话」，那就把对话从主干道降成了抽屉。 -->
+    <div class="视图区" id="视图区" hidden></div>
+
+    <div class="说区">
+      <div class="说心">
+        <div class="带" id="带">
+          关于 <span class="号" id="带号"></span>
+          <button id="带撤" title="不带这条上下文">×</button>
+        </div>
+        <textarea class="说框" id="说框" rows="1" placeholder="说点什么…（@ 点名某席，不点名则相关席应答）"></textarea>
+        <div class="说注" id="说注">Enter 发送 · Shift+Enter 换行 · @ 点名 · 数字键 1-9 选左栏</div>
+      </div>
+    </div>
+  </main>
+
+  <aside class="脉栏">
+    <div class="栏头"><h2>产线脉搏</h2><span class="数" id="脉时">—</span></div>
+    <div class="计格" id="计格"></div>
+    <div class="跑列" id="跑列"></div>
+    <div class="事列" id="事列"></div>
+  </aside>
+
+</div>
+<script src="app.js"></script>
+<!-- 视图切换单独一个文件：它跟坐席那套（SSE、人闸、脉搏）没有共享状态，
+     混进 app.js 只会让两件事互相牵连。它自己失效时主页照常能用。 -->
+<script src="视图.js"></script>
+</body>
+</html>

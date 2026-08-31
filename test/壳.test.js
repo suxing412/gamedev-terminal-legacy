@@ -1,0 +1,187 @@
+// 壳.test.js — 主页与标签页共用一个壳的判据。
+//
+// 病灶（2026-08-30 制作人指出「主页和标签页割裂」）：主页与标签页是两套壳，
+// 两份**手写**导航必然分叉——而分叉的表现是「新做的页面看不见」，不报错，没人会发现。
+// 实际发生了三次：08-28 群聊、08-29 监视、08-30 班次，每次都是漏改了另一份。
+//
+// 所以这一组的重心不是「页面能打开」，是**两处渲染同源**与**降级路不断**。
+'use strict';
+const assert = require('node:assert');
+const test = require('node:test');
+const fs = require('node:fs');
+const path = require('node:path');
+const http = require('node:http');
+
+const { 页签表 } = require('../server/render/页签');
+const { 头 } = require('../server/render/页');
+
+const 请求 = (port, 路径) => new Promise((res, rej) => {
+  http.get({ host: '127.0.0.1', port, path: 路径 }, (up) => {
+    let s = ''; up.setEncoding('utf8');
+    up.on('data', (d) => { s += d; });
+    up.on('end', () => res({ 码: up.statusCode, 文: s }));
+  }).on('error', rej);
+});
+
+let _服务 = null;
+const 取服务 = async () => {
+  if (!_服务) {
+    process.env.NO_INTEL = '1';
+    process.env.TERMINAL_SHIFT_DRY = '1';
+    _服务 = await require('../server').start();
+  }
+  return _服务;
+};
+test.after(() => { try { if (_服务 && _服务.server) _服务.server.close(); } catch { /* 已关 */ } });
+
+// ── 单一事实源 ────────────────────────────────────────────
+test('源① 服务端顶栏的页签集合 === 页签表（不许手写第二份）', () => {
+  const h = 头({ 标题: '测', 当前: 'shift', 日: '' });
+  for (const t of 页签表.filter((x) => !x.主页)) {
+    assert.ok(h.includes('>' + t.名 + '<'),
+      `顶栏漏了「${t.名}」——这正是三次「新页面看不见」的形状`);
+  }
+  // 主页那一项在独立页面上是「离开这一页回到壳」，不是页签，所以只验它在、不验它叫什么：
+  // 同一项在壳里叫「对话」、在独立页上叫「主页」，两种称呼各自是对的。
+  assert.ok(/class="tab back" href="\/"/.test(h), '独立页面缺回主页的路——进得去出不来');
+});
+
+test('源② /api/views 下发的就是那份表', async () => {
+  const r = await 取服务();
+  const x = await 请求(r.port, '/api/views');
+  assert.equal(x.码, 200);
+  const j = JSON.parse(x.文);
+  assert.deepEqual(j.视图.map((v) => v.键), 页签表.map((v) => v.键));
+  assert.deepEqual(j.视图.map((v) => v.名), 页签表.map((v) => v.名));
+});
+
+test('源③ 主页不许再手写导航项（写死一个就会再分叉一次）', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const 导航段 = html.slice(html.indexOf('<nav class="去"'), html.indexOf('</nav>') + 6);
+  assert.ok(!/<a\s/.test(导航段),
+    '导航里出现了手写 <a>：' + 导航段.slice(0, 200)
+    + '\n两份手写列表必然分叉，而分叉的表现是「新页面看不见」，不报错。');
+});
+
+test('源④ 表里每一项的路都真的能打开（表和路由不许脱节）', async () => {
+  const r = await 取服务();
+  for (const t of 页签表) {
+    const x = await 请求(r.port, t.路);
+    assert.ok(x.码 === 200, `${t.名}（${t.路}）返回 ${x.码}——表里有它，路由没有它`);
+  }
+});
+
+// ── 片段模式与降级路 ──────────────────────────────────────
+test('片① 每个非主页视图都给得出片段，且被 .视图 包着', async () => {
+  const r = await 取服务();
+  for (const t of 页签表.filter((x) => !x.主页)) {
+    const x = await 请求(r.port, t.路 + '?frag=1');
+    assert.equal(x.码, 200, t.名);
+    assert.ok(/^<div class="视图"[ >]/.test(x.文), `${t.名} 的片段没被抽出来：` + x.文.slice(0, 80));
+    assert.ok(!/<!doctype/i.test(x.文), `${t.名} 的片段里还带着整页外壳`);
+  }
+});
+
+test('片④ 整页带 <script> 的视图，片段必须把 src 带出来（否则脚本在壳里永远不跑）', async () => {
+  // 案源 2026-08-31：页面的 <script> 在 </main> 之外，而片段中间件只抠 <main>，
+  // innerHTML 又不执行 <script>——于是 **原始流 / 监视 / 席间存照 / 文稿 四页的前端脚本，
+  // 在主页壳里从来没跑过一次**：监视页不刷新、存照页没有坐席名单、文稿台搜不了也跳不了。
+  // 四页看着都在，只是不动。「静止的活人」不报任何错，所以一直没人发现。
+  const r = await 取服务();
+  let 查过 = 0;
+  for (const t of 页签表.filter((x) => !x.主页)) {
+    const 整 = await 请求(r.port, t.路);
+    const 脚 = [...整.文.matchAll(/<script[^>]+src="([^"]+)"[^>]*><\/script>/g)].map((m) => m[1]);
+    if (!脚.length) continue;
+    查过++;
+    const 片 = await 请求(r.port, t.路 + '?frag=1');
+    const 头 = 片.文.slice(0, 300);
+    for (const s of 脚) {
+      assert.ok(头.includes(s),
+        `${t.名} 的整页有 ${s}，片段却没带上——它在壳里永远不会执行：` + 头.slice(0, 160));
+    }
+  }
+  // 一个带脚本的视图都没查到，说明这条判据在验空气
+  assert.ok(查过 >= 3, `只查到 ${查过} 个带脚本的视图，判据可能已被架空`);
+});
+
+test('片② **整页一字未动**——降级路不许断', async () => {
+  const r = await 取服务();
+  for (const t of 页签表.filter((x) => !x.主页)) {
+    const x = await 请求(r.port, t.路);
+    assert.ok(/^<!doctype/i.test(x.文), `${t.名} 的整页坏了`);
+    assert.ok(x.文.includes('<main class="wrap">'), `${t.名} 整页缺主体`);
+    assert.ok(x.文.includes('class="top"'), `${t.名} 整页缺顶栏——单独打开时它是唯一的导航`);
+  }
+});
+
+test('片③ frag=1 不许改变非 HTML 的响应（JSON 照旧）', async () => {
+  const r = await 取服务();
+  const x = await 请求(r.port, '/api/views?frag=1');
+  assert.equal(x.码, 200);
+  assert.ok(x.文.startsWith('{'), 'JSON 被片段模式改坏了：' + x.文.slice(0, 60));
+  JSON.parse(x.文);
+});
+
+// ── 同构守卫（不是判据，是防特定退化，照 packaged-root 的成例）──
+test('守① 谁样式了 body/wrap，谁就必须同时挂 .视图（否则片段在主页里没排版）', () => {
+  // 这一条原先是**硬编码的三项名单** ['read.css','watch.css','班次.css']。
+  // 硬编码名单的毛病和它要防的病是同一个：加了第四张表，没人会记得来改这里，
+  // 于是新页在主页里排版塌掉，而判据一片绿——**两份手工维护的列表必然分叉**。
+  //
+  // 改成自动发现，并且把不变量写准一点：
+  // 不是"每张视图样式表都要有那两条"（存照.css 全走自己的 cz-* 类，没有 body/wrap 规则，
+  // 强加那两条只是噪声），而是**「样式了 body 或 .wrap 的，必须也覆盖 .视图」**。
+  // style.css 与 tokens.css 是壳自己的表，body 归它们管，不在此列。
+  const 目 = path.join(__dirname, '..', 'public');
+  const 壳自己的 = new Set(['style.css', 'tokens.css']);
+  const 表们 = fs.readdirSync(目).filter((f) => f.endsWith('.css') && !壳自己的.has(f));
+  assert.ok(表们.length >= 3, '一张视图样式表都没找到，这条守卫在验空气');
+
+  const 查过 = [];
+  for (const f of 表们) {
+    const s = fs.readFileSync(path.join(目, f), 'utf8');
+    if (/^body\s*\{/m.test(s)) assert.fail(`${f} 有裸 body 规则，没挂 .视图——片段在主页里会失去排版`);
+    if (/^\.wrap\s*\{/m.test(s)) assert.fail(`${f} 有裸 .wrap 规则，没挂 .视图`);
+    if (/^body, \.视图 \{/m.test(s) || /^\.wrap, \.视图 \{/m.test(s)) 查过.push(f);
+  }
+  // 至少三张表确实走了这个写法——全被改成"不写 body 规则"也能满足上面的断言，
+  // 那时这条守卫就变成了永远绿的摆设。
+  assert.ok(查过.length >= 3, '走 body,.视图 写法的表少于三张，守卫可能已被架空：' + 查过.join(','));
+});
+
+test('守①b **生产前端不许用 alert/confirm/prompt**（Electron 壳内静默哑弹）', () => {
+  // 换装仪式第⑨条。这个项目为它中招过两次（confirm 十连哑弹、prompt 四连哑弹），
+  // 两次都是**浏览器预览里一切正常**——所以这条只能靠守卫，测不出来。
+  //
+  // 哑弹在文稿台尤其毒：confirm 若恒返回假，「切页签确认」变成永远切不走、
+  // 「退出编辑」变成永远退不出；恒返回真，那几道确认等于不存在。两边都坏，都不报错。
+  //
+  // 这是**源码守卫**不是行为判据（H104 口径：grep 源码不算判据）。
+  // 这里用守卫是对的：坏结果发生在被测进程之外（Electron 壳），行为判据够不着
+  // ——与 test/快捷键.test.js 同一条理由。
+  const 目 = path.join(__dirname, '..', 'public');
+  const 打包产物 = new Set(['编辑器.js']);      // esbuild 产物里第三方库可能自带这些字样
+  const 犯 = [];
+  for (const f of fs.readdirSync(目).filter((x) => x.endsWith('.js') && !打包产物.has(x))) {
+    const 源 = fs.readFileSync(path.join(目, f), 'utf8');
+    // 去注释再看——本条案情就写在注释里，正当地提到了这三个名字
+    const 净 = 源.replace(/\/\*[\s\S]*?\*\//g, '')
+      .split('\n').filter((l) => !/^\s*(\/\/|\*)/.test(l)).join('\n');
+    for (const m of 净.matchAll(/(?:^|[^.\w])(alert|confirm|prompt)\s*\(/g)) {
+      犯.push(`${f}: ${m[1]}(`);
+    }
+  }
+  assert.deepStrictEqual(犯, [],
+    '生产前端又用上原生对话框了，它在 Electron 壳里静默哑弹：' + 犯.join('、')
+    + '\n用 文稿.js 里的自绘 问()/告() 那一族（返回 Promise）。');
+});
+
+test('守② 话流与视图区要有显式的 [hidden] 规则', () => {
+  // hidden 属性对设了 display 的元素不生效（类选择器盖过浏览器默认表），
+  // 于是切视图时话流仍然画在屏上，两块内容叠着——JS 报 hidden=true，眼睛看见两份。
+  // 这类「属性设了但没生效」的错不报任何异常，只能靠看出来；这条守卫防它悄悄回来。
+  const s = fs.readFileSync(path.join(__dirname, '..', 'public', 'style.css'), 'utf8');
+  assert.ok(/\.话流\[hidden\]/.test(s) && /\.视图区\[hidden\]/.test(s),
+    'style.css 缺 [hidden] 显式规则');
+});

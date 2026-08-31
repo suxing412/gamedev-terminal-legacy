@@ -1,0 +1,189 @@
+@import url("tokens.css");
+
+/* 班次.css — /shift 页
+ *
+ * 继承既有世界（tokens.css），不另发明颜色。形制接住监视页：
+ * 顶上一条按时间排的班次带，中间是报告正文，底下是历次。
+ *
+ * 三条贯穿的纪律：
+ *
+ * **一 · 十种态不靠颜色区分。** 每种态有自己画出来的形状（见 班次页.js 的 态谱），
+ *   颜色只是第二重编码。只靠颜色的话，色觉差异的人分不出「断了」和「被闸挡」，
+ *   而扫一眼的人分不出任何两个同族的态。
+ *
+ * **二 · 正文那一格是 Read，其余是 Operate。** 两种取向同页共存是刻意的：
+ *   带与历次要密（一眼扫完），正文要疏（要真读进去，65–75ch）。
+ *   用同一套间距去排两者，必然有一边是错的。
+ *
+ * **三 · 只有一处动效。** 「运行中」那个转圈是这一页唯一动的东西，
+ *   因为它是唯一「此刻真的在变」的状态。常驻整天的屏上，多一处动就是多一次打扰。
+ */
+
+html { color-scheme: dark; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body, .视图 {
+  background: var(--ground);
+  color: var(--ink);
+  font: 400 15px/1.6 var(--sans);
+  font-feature-settings: "tnum" 1;      /* 等宽数字：时刻与 token 数不许抖动布局 */
+  -webkit-font-smoothing: antialiased;
+  min-height: 100%;
+}
+
+/* ── 浏览器自带的那几处也归这套系统管 ──
+   选区、光标、滚动条、焦点圈、下划线间距——不管它们，等于页面只做了一半。 */
+::selection { background: var(--gate-wash); color: var(--ink); }
+:root { caret-color: var(--gate); accent-color: var(--gate); }
+* { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; border: 2px solid var(--ground); }
+*::-webkit-scrollbar-thumb:hover { background: var(--raised); }
+*::-webkit-scrollbar-track { background: transparent; }
+a { color: inherit; text-underline-offset: 3px; }
+:focus-visible { outline: 2px solid var(--gate); outline-offset: 2px; border-radius: 3px; }
+
+.wrap, .视图 { padding: var(--s5) var(--s5) var(--s6); max-width: 1500px; margin: 0 auto; }
+
+/* ── 状态记号 ──────────────────────────────────────────
+   形状在 SVG 里（十种各不相同），这里只给族的颜色与权重。 */
+.mk { flex: none; vertical-align: -1px; }
+.mk-ok { color: var(--live); }
+.mk-run { color: var(--gate); }
+.mk-idle { color: var(--ink-3); }
+.mk-bad { color: var(--gate-deep); }
+
+/* 唯一一处动效：只有「运行中」转。它是这一页唯一此刻真在变的东西。 */
+@keyframes sf-spin { to { transform: rotate(360deg); } }
+.mk .spin { transform-origin: 6px 6px; animation: sf-spin 1.6s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .mk .spin { animation: none; }
+  * { transition: none !important; }
+}
+
+/* ── 班次带：按到点排成一条 ─────────────────────────────
+   不是卡片网格。四个班次有天然的时间顺序，按时间排，「今天走到哪儿了」自己就看得出来。 */
+.sbar { margin-bottom: var(--s5); }
+
+.sline {
+  display: flex; flex-wrap: wrap; align-items: stretch;
+  gap: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.si {
+  display: grid;
+  grid-template-columns: auto;
+  grid-auto-rows: min-content;
+  gap: 2px;
+  flex: 1 1 200px; min-width: 0;
+  padding: var(--s3) var(--s4);
+  border-right: 1px solid var(--line-soft);
+  text-decoration: none;
+  transition: background 120ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.si:last-child, .sline > :last-child { border-right: 0; }
+a.si:hover { background: var(--raised); }
+a.si .si-n { text-decoration: underline; text-decoration-color: var(--line); }
+
+.si-t { font: 500 12.5px var(--mono); color: var(--ink-3); letter-spacing: 0.02em; }
+.si-t .only { color: var(--ink-3); font-size: 11px; }
+.si-n { display: flex; align-items: center; gap: var(--s2); font-size: 14.5px; color: var(--ink); }
+.si-s { font-size: 12.5px; font-weight: 500; }
+.si-w { font-size: 11.5px; line-height: 1.45; color: var(--ink-3); }
+
+/* 族只改「态」那一行的颜色与该不该重，其余照旧——
+   颜色是第二重编码，不是唯一编码。 */
+.f-ok   .si-s { color: var(--live); }
+.f-run  .si-s { color: var(--gate); }
+.f-idle .si-s { color: var(--ink-3); }
+.f-bad  .si-s { color: var(--gate-deep); }
+/* 只有「要查」这一族值得把整格抬起来——其余三族都是「不用管」，抬起来就是噪声 */
+.f-bad { background: var(--gate-wash); }
+
+/* 「现在」插在它该在的位置上 */
+.now {
+  display: flex; align-items: center;
+  padding: 0 var(--s3);
+  font: 500 11px var(--mono);
+  color: var(--gate);
+  border-right: 1px solid var(--line-soft);
+  background: linear-gradient(var(--gate), var(--gate)) center/1px 100% no-repeat;
+  background-color: var(--panel);
+  writing-mode: horizontal-tb;
+}
+
+/* ── 闸 ────────────────────────────────────────────────
+   两个数都显示：它们是两道独立的闸，任一挡住都开不了班。
+   阈值跟着显示——裸数字没有意义。 */
+.sgate {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s4);
+  margin-top: var(--s2);
+  padding: var(--s2) var(--s4);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+.sgate .gk { font-weight: 500; color: var(--ink-2); }
+.sgate .gv { color: var(--ink-3); }
+.sgate .gv b { font: 500 13px var(--mono); color: var(--ink); margin-left: 2px; }
+.sgate .gw { color: var(--ink-3); font-size: 11.5px; flex: 1 1 100%; }
+.g-bad { border-color: var(--gate-deep); background: var(--gate-wash); }
+.g-bad .gk { color: var(--gate-deep); }
+
+/* ── 报告正文（Read）──────────────────────────────────
+   这一格与上下两格取向不同：那两格要密，这一格要能真读进去。 */
+.srep {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: var(--s5) var(--s6);
+  margin-bottom: var(--s5);
+}
+.srep-h h2 { font-size: 13px; font-weight: 500; color: var(--ink-3); font-family: var(--mono); }
+.srep.empty h2 { font-size: 17px; color: var(--ink-2); font-family: var(--sans); margin-bottom: var(--s2); }
+
+/* 第一眼：坐席自己标的重点。**只提这一节**——按段落找「结论」就等于解析散文了。 */
+.eye {
+  margin: var(--s4) 0 var(--s5);
+  padding: var(--s4) var(--s5);
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.eye-k { display: block; font: 500 11px var(--mono); letter-spacing: 0.06em; color: var(--gate); margin-bottom: var(--s2); }
+.eye-b > :first-child { margin-top: 0; }
+.eye-b > :last-child { margin-bottom: 0; }
+
+/* .prose 排版已抽进 public/prose.css（班次报告与文稿台共用，抄两份必然分叉） */
+
+/* ── 历次（Operate）─────────────────────────────────── */
+.shist h2 { font-size: 13px; font-weight: 500; color: var(--ink-3); font-family: var(--mono); margin-bottom: var(--s3); }
+.htab { width: 100%; border-collapse: collapse; font-size: 13px; }
+.htab th {
+  text-align: left; font-weight: 500; font-size: 11.5px; color: var(--ink-3);
+  padding: 0 var(--s3) var(--s2); border-bottom: 1px solid var(--line);
+}
+.htab td { padding: var(--s2) var(--s3); border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+.htab tr:last-child td { border-bottom: 0; }
+.htab tr.bad td { background: var(--gate-wash); }
+.c-t, .c-d, .c-o { font: 400 12.5px var(--mono); color: var(--ink-2); white-space: nowrap; }
+.c-n { color: var(--ink); }
+.c-r { display: flex; align-items: baseline; gap: var(--s2); flex-wrap: wrap; color: var(--ink-2); }
+.c-r .why { color: var(--ink-3); font-size: 11.5px; flex: 1 1 100%; }
+.c-a a { color: var(--ink-3); font-size: 12px; }
+.c-a a:hover { color: var(--ink); }
+
+/* 读不到 ≠ 零。它长得跟数字不一样，而且说得出是读不到。 */
+.unk { color: var(--ink-3); font-style: normal; font-family: var(--sans); font-size: 12px; }
+.hint { color: var(--ink-3); font-size: 13.5px; }
+
+@media (max-width: 900px) {
+  .si { flex: 1 1 100%; border-right: 0; border-bottom: 1px solid var(--line-soft); }
+  .now { flex: 1 1 100%; border-right: 0; border-bottom: 1px solid var(--line-soft); padding: var(--s2) var(--s4); }
+  .srep { padding: var(--s4); }
+}

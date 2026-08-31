@@ -1,0 +1,56 @@
+/* prose.css — 渲染后的 markdown 正文排版。**两页共用**（班次报告 / 文稿台）。
+ *
+ * 原先这一段长在 班次.css 里。文稿台上线后成了两页共用，抄一份过去必然分叉——
+ * 页签表那条注释里的教训（08-28 群聊、08-29 监视、08-30 班次，同一个错犯了三次）
+ * 讲的就是这件事：两份手工维护的同类东西，分叉只是时间问题。
+ *
+ * 注意这里**不写 body / .wrap 规则**：它是排版表不是页面表，
+ * 所以不需要 `body, .视图` 那套（壳.test.js 守① 的口径）。
+ */
+
+.prose { max-width: 70ch; }                 /* 65–75ch */
+
+.prose h1 { font-size: 22px; font-weight: 500; margin: var(--s6) 0 var(--s3); text-wrap: balance; letter-spacing: -0.01em; }
+.prose h2 { font-size: 17px; font-weight: 500; margin: var(--s6) 0 var(--s3); text-wrap: balance; }
+.prose h3 { font-size: 15px; font-weight: 500; margin: var(--s5) 0 var(--s2); color: var(--ink-2); }
+/* h4–h6：渲染器 2026-08-31 才认到 h6，此前 18 个 #### 全掉进段落。
+   三级以下不再缩小字号——再小就不是层级是噪声了，改用颜色与字重拉开。 */
+.prose h4 { font-size: 14px; font-weight: 600; margin: var(--s5) 0 var(--s2); color: var(--ink-2); }
+.prose h5 { font-size: 13px; font-weight: 600; margin: var(--s4) 0 var(--s2); color: var(--ink-3); }
+.prose h6 { font-size: 13px; font-weight: 500; margin: var(--s4) 0 var(--s2); color: var(--ink-3); }
+
+.prose p { margin: 0 0 var(--s4); text-wrap: pretty; }
+.prose ul, .prose ol { margin: 0 0 var(--s4) 1.3em; }
+.prose li { margin-bottom: var(--s1); }
+.prose li > ul, .prose li > ol { margin-top: var(--s1); margin-bottom: 0; }
+.prose strong { font-weight: 600; color: var(--ink); }
+.prose em { font-style: normal; color: var(--ink); border-bottom: 1px solid var(--line); }
+.prose a { color: var(--gate); text-underline-offset: 2px; }
+
+.prose code { font: 400 13px var(--mono); background: var(--raised); padding: 1px 5px; border-radius: 4px; }
+.prose pre {
+  font: 400 12.5px/1.55 var(--mono);
+  background: var(--ground); border: 1px solid var(--line); border-radius: 6px;
+  padding: var(--s3) var(--s4); margin: 0 0 var(--s4);
+  overflow-x: auto;                          /* 宽内容自己滚，整页不许横滚 */
+}
+.prose pre code { background: none; padding: 0; font-size: inherit; }
+
+.prose hr { border: 0; border-top: 1px solid var(--line); margin: var(--s5) 0; }
+.prose blockquote {
+  margin: 0 0 var(--s4); padding-left: var(--s4);
+  border-left: 1px solid var(--line); color: var(--ink-2);
+}
+
+/* 表格宽起来是常态（协议库里的单元格有 400 汉字一格的），所以它自己滚，
+   而不是把整页撑横。display:block 是为了让 overflow 生效。 */
+.prose table {
+  border-collapse: collapse; margin: 0 0 var(--s4);
+  font-size: 13.5px; display: block; overflow-x: auto; max-width: 100%;
+}
+.prose th, .prose td {
+  border: 1px solid var(--line); padding: var(--s2) var(--s3);
+  text-align: left; vertical-align: top;
+}
+.prose th { background: var(--raised); font-weight: 500; color: var(--ink-2); }
+/* 渲染器按 :---: 吐 style="text-align:…"，行内样式自然盖过上面这条默认左对齐 */

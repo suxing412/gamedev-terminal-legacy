@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "terminal",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["server.js"],
+      "port": 4280
+    },
+    {
+      "name": "terminal-dev",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["scripts/预览.js"],
+      "port": 4399
+    }
+  ]
+}

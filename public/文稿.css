@@ -1,0 +1,481 @@
+/* 文稿.css — 文稿台
+ *
+ * 两处选择器都要写：独立打开这一页时是 body，被抠成片段塞进主页时是 .视图。
+ * 这条不是可选的——read.css / watch.css / 班次.css 都这么写，漏了就是主页里排版塌掉。
+ */
+html { height: 100%; }
+
+/* 独立打开这一页时，body 要成为一条竖直的 flex：顶栏定高，主体吃掉剩下的。
+ *
+ * **不这么做，整条高度链是断的。**实测：html/body 没有确定高度 → .wrap 的
+ * `height:100%` 无从解析 → 退化成「内容有多高就多高」→ body 1107px 而窗口只有 720px。
+ * 症状不是「有个滚动条」——.稿面 是 overflow:hidden，所以多出来的部分**根本够不着**，
+ * 冲突框实测落在 top:760，你点存盘会觉得什么都没发生。
+ *
+ * 用 body.页 而不是裸 body：这张表在主页壳里也会被预载，
+ * 裸 body 规则会把主页那三栏骨架一起改掉。类名由 页.js 的 壳() 加。
+ */
+body.页, .视图 {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--sans);
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.wrap, .视图 {
+  max-width: none;
+  padding: 0;
+  flex: 1;
+  min-height: 0;
+  /* **这两行不能省。** read.css 给 .wrap 的是 `margin: 0 auto`（阅读页居中），
+     而在 flex 列里 auto 边距会吃掉交叉轴的空闲空间——于是这一格**不再拉伸**，
+     宽度退回 fit-content。而它的内容全是百分比/minmax(0,1fr)，
+     fit-content 就是 0：整块屏幕黑掉，DOM 全在、位置也对，**只是宽度是 0**。 */
+  width: 100%;
+  margin: 0;
+}
+
+/* 左库 + 右面。**grid 定宽，不用嵌套 flex 撑宽**——
+   壳内 Chromium 124 算错嵌套 flex 的宽，且只在 exe 里复现（ai-vault 坑档案）。
+
+   容器查询而不是媒体查询：这一页有两种活法——独立打开时占满整个窗口，
+   被抠成片段塞进主页时只分到中间那一格（左右还各有一栏常驻）。
+   **窗口宽不代表这一页宽**，按视口断点排会在壳里排错。 */
+/* 容器挂在**外面这一层**，不挂在 稿台 上。
+   容器查询只能管容器的后代，管不了容器自己——首版把 container-type 挂在 稿台，
+   然后在 @container 里改 稿台 的列模板，**那几条是死代码**（实测列模板纹丝不动）。
+   而同一块里 .稿量{display:none} 却生效，因为它是后代。这种半生效最难发现。 */
+.稿容 {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  container-type: inline-size;
+  container-name: 稿台;
+}
+.稿台 {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+}
+/* 收起文件库。壳里中栏只有 ~720px，库占 300 之后正文剩 420px ≈ 27 个汉字一行——
+   太窄。收起来正文能到 ~50 字一行，才是能读的宽度。 */
+.稿台.收库 { grid-template-columns: 0 minmax(0, 1fr); }
+.稿台.收库 .稿库 { visibility: hidden; }
+.稿库钮 {
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.稿库钮:hover { color: var(--ink-2); border-color: var(--ink-3); }
+.稿台.收库 .稿库钮 { color: var(--gate); border-color: var(--gate); }
+
+/* ── 左：文件库 ───────────────────────────────────────── */
+.稿库 {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+}
+.稿搜 { padding: var(--s3); border-bottom: 1px solid var(--line-soft); }
+.稿搜 input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--ground);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+.稿搜 input::placeholder { color: var(--ink-3); }
+.稿搜 input:focus { outline: none; border-color: var(--gate); }
+.稿计 {
+  padding: 6px var(--s3);
+  font-size: 11px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid var(--line-soft);
+}
+.稿列 { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: var(--s4); }
+
+.稿组 > summary {
+  padding: 7px var(--s3);
+  font-size: 12px;
+  color: var(--ink-2);
+  cursor: pointer;
+  user-select: none;
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line-soft);
+}
+.稿组 > summary::-webkit-details-marker { display: none; }
+.稿组 > summary::before { content: "▸"; margin-right: 6px; color: var(--ink-3); font-size: 10px; }
+.稿组[open] > summary::before { content: "▾"; }
+.稿数 { float: right; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
+.稿项 {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px var(--s3) 5px 26px;
+  color: var(--ink-2);
+  text-decoration: none;
+  font-size: 12px;
+  line-height: 1.45;
+  border-left: 2px solid transparent;
+}
+.稿项:hover { background: var(--raised); color: var(--ink); }
+.稿项.在 { background: var(--gate-wash); color: var(--ink); border-left-color: var(--gate); }
+.稿名 {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;          /* 长路径截前面留后面——文件名比目录重要 */
+  text-align: left;
+}
+.稿注 { color: var(--ink-3); font-size: 10px; font-variant-numeric: tabular-nums; flex: none; }
+.稿只读 {
+  flex: none;
+  font-size: 9px;
+  color: var(--ink-3);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0 3px;
+}
+.稿项[hidden] { display: none; }
+.稿组.空 { display: none; }
+
+/* ── 右：阅读面 ───────────────────────────────────────── */
+.稿面 { position: relative; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.稿头 {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s4);
+  padding: var(--s4) var(--s5) var(--s3);
+  border-bottom: 1px solid var(--line);
+}
+.稿题 h1 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+.稿路 { display: block; margin-top: 3px; font-size: 11px; color: var(--ink-3); font-family: var(--mono); }
+.稿钮 { display: flex; align-items: center; gap: var(--s3); flex: none; }
+.稿量 { font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.稿编 {
+  padding: 5px 14px;
+  border: 1px solid var(--gate);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--gate);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.稿编:hover:not(:disabled) { background: var(--gate-wash); }
+.稿编:disabled { opacity: 0.45; cursor: default; border-color: var(--line); color: var(--ink-3); }
+.稿只读大 {
+  font-size: 11px;
+  color: var(--ink-3);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px 9px;
+}
+
+.稿体 { flex: 1; min-height: 0; display: grid; grid-template-columns: 232px minmax(0, 1fr); }
+.稿体.无记 { grid-template-columns: minmax(0, 1fr); }   /* 0 个记号就不占那一列 */
+.稿正文 { overflow-y: auto; padding: var(--s5) var(--s5) 30vh; }
+.稿正文 > :first-child { margin-top: 0; }
+
+/* 空态那一行。放在标题下面，一行，不占列。 */
+.记注 {
+  padding: 8px var(--s5);
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 11.5px;
+  color: var(--ink-3);
+  line-height: 1.6;
+}
+.记注细 { opacity: 0.8; }
+
+/* ── 窄容器（在主页壳里就是这种）───────────────────────
+   中栏本来就窄，再切成 库 + 记号栏 + 正文 三列，正文只剩两百来像素。
+   所以：先把库收窄，再把记号栏从竖列改成横条。 */
+@container 稿台 (max-width: 1040px) {
+  .记号栏 {
+    grid-column: 1 / -1;
+    border-right: 0;
+    border-bottom: 1px solid var(--line-soft);
+    max-height: 34vh;
+  }
+  .稿体 { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .记条们 { display: flex; flex-wrap: wrap; gap: 2px; padding: 6px var(--s3); }
+  .记条 { width: auto; max-width: 30ch; border: 1px solid var(--line-soft); border-radius: 4px; }
+}
+@container 稿台 (max-width: 820px) {
+  .稿头 { padding: var(--s3) var(--s4) var(--s2); }
+  .稿正文 { padding: var(--s4) var(--s4) 30vh; }
+  .稿量 { display: none; }        /* 行数字节这类次要信息先让位给正文 */
+}
+
+.稿空 { align-items: center; justify-content: center; }
+.稿空心 { max-width: 46ch; padding: var(--s6); color: var(--ink-2); }
+.稿空心 h1 { margin: 0 0 var(--s3); font-size: 19px; }
+.稿空心 p { margin: 0 0 var(--s3); font-size: 13px; line-height: 1.7; }
+.稿细 { color: var(--ink-3); font-size: 12px !important; }
+.稿错 { padding: var(--s5); color: var(--warn); font-size: 13px; }
+
+/* ── 记号栏 ──────────────────────────────────────────── */
+.记号栏 {
+  border-right: 1px solid var(--line-soft);
+  overflow-y: auto;
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+}
+.记头 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  padding: var(--s3);
+  border-bottom: 1px solid var(--line-soft);
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+}
+.记计 {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid currentColor;
+}
+.记计.gai, .记条.gai .记标 { color: var(--gate); }
+.记计.jia, .记条.jia .记标 { color: var(--live); }
+.记计.shan, .记条.shan .记标 { color: var(--gate-deep); }
+.记计.wen, .记条.wen .记标 { color: var(--ink-2); }
+.记交 {
+  margin-left: auto;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.记交:hover { border-color: var(--gate); color: var(--gate); }
+.记条们 { padding: 4px 0; }
+.记条 {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: baseline;
+  padding: 6px var(--s3);
+  color: var(--ink-2);
+  text-decoration: none;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.记条:hover { background: var(--raised); color: var(--ink); }
+.记条.在 { background: var(--gate-wash); }
+.记标 { font-weight: 600; font-size: 11px; }
+.记文 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.记行 { color: var(--ink-3); font-size: 10px; font-variant-numeric: tabular-nums; }
+
+.记号栏.空 { align-items: stretch; }
+.记空 { padding: var(--s4) var(--s3); color: var(--ink-3); }
+.记空 b { display: block; color: var(--ink-2); font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+.记空 p { margin: 0 0 8px; font-size: 11.5px; line-height: 1.65; }
+.记细 { color: var(--ink-3); opacity: 0.85; }
+.记细 em { color: var(--ink-2); font-style: normal; border-bottom: 1px solid var(--line); }
+
+/* 跳过去时把那一段点亮一下——不加动画，值班屏上闪一下比滑一段更好定位 */
+.稿正文 [data-行].跳 {
+  background: var(--gate-wash);
+  box-shadow: -8px 0 0 var(--gate-wash), inset 2px 0 0 var(--gate);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .稿正文 { scroll-behavior: auto; }
+}
+
+/* ── 编辑态 ──────────────────────────────────────────── */
+.编区 { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+.编条 {
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+  padding: 7px var(--s4);
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  font-size: 11.5px;
+}
+.编态 { color: var(--ink-3); font-variant-numeric: tabular-nums; min-width: 15ch; }
+.编态.警 { color: var(--warn); }
+.编态.坏 { color: var(--gate-deep); }
+.编记 { color: var(--ink-3); display: flex; align-items: center; gap: 4px; }
+.编右钮 { margin-left: auto; display: flex; gap: var(--s2); }
+
+.编记钮, .预记 {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.6;
+  padding: 1px 7px;
+  cursor: pointer;
+}
+.编记钮:hover, .预记:hover { color: var(--ink); }
+.记改:hover { border-color: var(--gate); color: var(--gate); }
+.记加:hover { border-color: var(--live); color: var(--live); }
+.记删:hover { border-color: var(--gate-deep); color: var(--gate-deep); }
+.记问:hover { border-color: var(--ink-2); color: var(--ink-2); }
+
+.编存, .编退 {
+  padding: 4px 13px;
+  border-radius: 5px;
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-2);
+}
+.编存 { border-color: var(--gate); color: var(--gate); }
+.编存:hover { background: var(--gate-wash); }
+.编退:hover { color: var(--ink); border-color: var(--ink-3); }
+
+.编格 { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+/* **min-height/min-width: 0 不能省。**grid 项的默认最小尺寸是 auto，
+   意思是「不许小于内容」——于是预览那一格被自己的长内容撑住，
+   把源码那一格的 1fr 挤成三行高。实测踩到：壳里上下分栏时源码区只剩 3 行。 */
+.编左, .编右 { min-width: 0; min-height: 0; }
+.编左 { overflow: hidden; border-right: 1px solid var(--line-soft); }
+.编左 .cm-editor { height: 100%; }
+.编左 .cm-editor.cm-focused { outline: none; }
+.编右 {
+  min-width: 0;
+  overflow-y: auto;
+  padding: var(--s4) var(--s5) 30vh;
+  max-width: none;                  /* 预览格自己已经限宽了，prose 的 70ch 在这里会再缩一次 */
+}
+.编右 > * { max-width: 70ch; }
+
+/* 每块旁边的四个记号钮。**平时压到很淡，鼠标扫过那一块才亮**——
+   一份 500 行的文档，四个按钮 × 每一块常亮就是一屏的噪声。 */
+.预记组 { display: inline-flex; gap: 3px; margin-left: 8px; vertical-align: middle; opacity: 0; transition: opacity .12s ease-out; }
+.编右 [data-行]:hover > .预记组, .预记组:focus-within { opacity: 1; }
+.编右 [data-行] { position: relative; }
+@media (prefers-reduced-motion: reduce) { .预记组 { transition: none; } }
+
+/* 窄容器：并排两栏就没法读了，改成上下 */
+/* 上下切分的门槛压到 620px，不是 900。
+   实测：壳里中栏 720 宽、编辑区只有 327 高——上下切开每格才 6 行，太憋。
+   同样这 720×327，左右并排是两个 360×327（各 12 行）。
+   **在这块屏上，高比宽值钱**：读代码和读散文都是纵向扫，
+   六行的窗口连一段都放不下，二十四字一行则完全能读。 */
+@container 稿台 (max-width: 620px) {
+  /* 行也要 minmax(0,…)，理由同上：不写的话「不许小于内容」会让预览把源码挤没 */
+  .编格 { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
+  .编左 { border-right: 0; border-bottom: 1px solid var(--line-soft); }
+}
+
+/* 编辑态把那行空态说明收起来——它是给「还没有记号」的读者看的，
+   而你已经在编辑器里了，那句话此刻只是在占高度。 */
+.稿面.在编 > .记注 { display: none; }
+
+/* ── 自绘问答 ────────────────────────────────────────
+   **不用 alert/confirm/prompt**：Electron 壳内原生对话框静默哑弹，
+   而这块屏的生产形态就是 Electron 壳（换装仪式⑨，本项目为此中招两次）。
+   挂在 body 上而不是 .稿台 里——编辑态下它要盖住整屏，包括左右两栏。 */
+.稿问罩 {
+  position: fixed;
+  inset: 0;
+  z-index: 200;                       /* 高过 --z-toast，它要盖住一切 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: oklch(0.08 0 0 / 0.62);
+  backdrop-filter: blur(1.5px);
+}
+.稿问 {
+  min-width: 320px;
+  max-width: 56ch;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .55);
+  padding: var(--s5);
+}
+.稿问题 { font-size: 14px; font-weight: 600; color: var(--ink); margin-bottom: var(--s3); }
+.稿问文 { font-size: 12.5px; line-height: 1.75; color: var(--ink-2); }
+.稿问钮 { display: flex; justify-content: flex-end; gap: var(--s2); margin-top: var(--s5); }
+.稿问钮 button {
+  padding: 6px 16px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.稿问钮 button:hover { color: var(--ink); border-color: var(--ink-3); }
+.稿问钮 button.重 { border-color: var(--gate); color: var(--gate); }
+.稿问钮 button.重:hover { background: var(--gate-wash); }
+.稿问钮 button:focus-visible { outline: 2px solid var(--gate); outline-offset: 2px; }
+
+/* ── 冲突 ──────────────────────────────────────────── */
+/* **浮层，不是流内元素。**冲突是要你当场决定的东西：
+   做成流内的话它跟着内容排，一旦上面的高度链出点问题就被顶到屏幕外，
+   而症状是「点了存盘什么都没发生」——比报错难查得多。 */
+.冲突 {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  z-index: var(--z-toast);
+  box-shadow: 0 -14px 34px rgba(0,0,0,.5);
+  border-top: 1px solid var(--gate);
+  background: var(--panel);
+  max-height: 60%;
+  overflow-y: auto;
+  padding: var(--s4);
+}
+.冲突[hidden] { display: none; }
+.冲头 b { display: block; color: var(--gate); font-size: 13px; margin-bottom: 3px; }
+.冲头 span { color: var(--ink-3); font-size: 11.5px; }
+.冲钮 { display: flex; flex-wrap: wrap; gap: var(--s2); margin: var(--s3) 0; }
+.冲钮 button {
+  padding: 4px 11px; border: 1px solid var(--line); border-radius: 5px;
+  background: transparent; color: var(--ink-2); font: inherit; font-size: 11.5px; cursor: pointer;
+}
+.冲钮 button:hover { color: var(--ink); border-color: var(--ink-3); }
+.冲钮 button[data-选="保留我的"] { border-color: var(--gate); color: var(--gate); }
+.冲钮 button[data-选="用盘上的"] { border-color: var(--gate-deep); color: var(--gate-deep); }
+.冲注 { color: var(--ink-3); font-size: 11.5px; line-height: 1.7; }
+.冲注 b { color: var(--warn); }
+
+.冲差 { font: 400 12px/1.6 var(--mono); border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
+.差行 { display: grid; grid-template-columns: 18px minmax(0, 1fr); white-space: pre-wrap; word-break: break-all; }
+.差行 i { font-style: normal; text-align: center; color: var(--ink-3); background: var(--ground); }
+.差行 span { padding: 0 8px; }
+.差增 { background: color-mix(in oklch, var(--live) 13%, transparent); }
+.差增 i { color: var(--live); }
+.差删 { background: color-mix(in oklch, var(--gate-deep) 13%, transparent); }
+.差删 i { color: var(--gate-deep); }
+.差同 { color: var(--ink-3); }

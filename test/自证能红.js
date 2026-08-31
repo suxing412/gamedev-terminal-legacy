@@ -1,0 +1,397 @@
+// 自证能红（H104）：逐处把实现拆掉，确认对应判据真的翻红；跑完一律还原。
+// 不做这一步，「6 项通过」可能只是因为判据压根没碰到那段代码——今天已经栽过两次
+// （监制台禁写区只验了 19 项里的 7 项；CRLF 跨行锚点静默不匹配）。
+const fs = require('fs');
+const cp = require('child_process');
+const path = require('path');
+const 根 = path.join(__dirname, '..');
+
+const 变异 = [
+  { 名: 'C1 抽掉 published_at 字段映射', 档: 'intel/adapters/rss.js',
+    找: "      published_at: 时刻(it.pubDate != null ? it.pubDate",
+    换: "      published_at: null && 时刻(it.pubDate != null ? it.pubDate" },
+  // 锚点要打在**真正处理「没有 pubDate 节点」的那一行**上。
+  // 上一版打在 `Number.isNaN(t) ? null : ...`，可空字符串在更前面就被 `if (!raw) return null` 截住，
+  // 根本走不到那行——变异因此无效，却看着像「判据没红」。锚点没打中病灶时，
+  // 得到的是假阴性，跟判据不合格长得一模一样。
+  { 名: 'C1 无日期条目改成拿抓取时刻冒充', 档: 'intel/adapters/rss.js',
+    找: '  if (!raw) return null;',
+    换: '  if (!raw) return new Date().toISOString();' },
+  { 名: 'C2 URL 规范化不再削 utm', 档: 'intel/dedupe.js',
+    找: '  for (const [k, v] of x.searchParams) if (!追踪参数.test(k)) keep.push([k, v]);',
+    换: '  for (const [k, v] of x.searchParams) keep.push([k, v]);' },
+  { 名: 'C2 规范化把真定位参数也削掉（反向病）', 档: 'intel/dedupe.js',
+    找: '  x.search = keep.length ?',
+    换: '  keep.length = 0; x.search = keep.length ?' },
+  { 名: 'C3 评分引擎不读配置（写死权重）', 档: 'intel/scoring.js',
+    找: '  const AB入 = AB.slice(0, cfg.入选.AB档topN);',
+    换: '  const AB入 = AB.slice(0, 12);' },
+  { 名: 'C3 S 档不再降门槛全入', 档: 'intel/scoring.js',
+    找: "  const S入 = 打过.filter((x) => x.tier === 'S' && x.score.总分 >= cfg.入选.S档门槛).sort(降序);",
+    换: "  const S入 = 打过.filter((x) => x.tier === 'S' && x.score.总分 >= 999).sort(降序);" },
+  { 名: 'C6 去掉逐源 try 隔离（坏源带走好源）', 档: 'intel/run.js',
+    找: '    } catch (e) {\n      // 坏源不带走好源',
+    换: '    } finally { if (false) {} } if (false) { try {} catch (e) {\n      // 坏源不带走好源' },
+  { 名: '装配器抽掉「未精编」标注（静默留白）', 档: 'intel/assemble.js',
+    找: "    行.push('  - *（本条未精编）*');",
+    换: "    // 变异：静默留白" },
+  { 名: '装配器抽掉一个区（源健康）', 档: 'intel/assemble.js',
+    找: "  md.push('## 源健康');",
+    换: "  md.push('## 变异掉的区');" },
+  { 名: 'GT-1 A1 把追加意图改成整表重写', 档: 'server/lib/线程.js', 测: 'node test/群聊.test.js',
+    找: '  const 写体 = JSON.stringify({ text: String(文) });',
+    换: '  const 写体 = JSON.stringify({ text: String(文), 重写: true });' },
+  { 名: 'GT-1 A2 摘掉路由侧白名单拒绝', 档: 'server/lib/路由.js', 测: 'node test/群聊.test.js',
+    找: '  if (!是白名单(发言人)) return { ok: false, 拒绝: true, 因: `不在群聊白名单内：${发言人}`, 唤起: [], 应答: [] };',
+    换: '  if (false) return { ok: false, 拒绝: true, 因: `不在群聊白名单内：${发言人}`, 唤起: [], 应答: [] };' },
+  { 名: 'GT-1 A4 离线时偷写本地 thread 文件', 档: 'server/lib/线程.js', 测: 'node test/群聊.test.js',
+    找: "  const r = await 请求JSON({ 方法: 'POST', 路径: 写路径, 体: 写体, origin: 选项.origin, 超时: 选项.超时 });\n  if (r.读不到) return r;",
+    换: "  const r = await 请求JSON({ 方法: 'POST', 路径: 写路径, 体: 写体, origin: 选项.origin, 超时: 选项.超时 });\n  if (r.读不到) { require('fs').appendFileSync(require('path').join(process.env.STUDIO_ROOT, 'thread.jsonl'), String(文)); return r; }" },
+  { 名: 'GT-1 B1 把 @ 路由改成广播全体', 档: 'server/lib/路由.js', 测: 'node test/群聊.test.js',
+    找: "    唤起 = [坐席.按名('助理'), ...被点];",
+    换: '    唤起 = 坐席.全部;' },
+  { 名: 'GT-1 C1 把线程写口改成动作口', 档: 'server/lib/线程.js', 测: 'node test/群聊.test.js',
+    找: "const 写路径 = '/api/relay';",
+    换: "const 写路径 = '/api/act/放行';" },
+  // 自启两处。这一格从前是判据真空——七条判据一条都没碰 portable，
+  // 而 portable 正是本项目唯一的打包目标。下面两处变异各自对应一条硬拦：
+  { 名: '自启 取路径改回 execPath（portable 下注册一条关窗即消失的路径）',
+    档: 'server/lib/自启.js', 测: 'node test/自启.test.js',
+    找: '  const exe = win(opts.exe || process.env.PORTABLE_EXECUTABLE_FILE || process.execPath);',
+    换: '  const exe = win(opts.exe || process.execPath);' },
+  // 这一条尤其要能红：删掉硬拦不会报错、不会告警，装() 照样返回 ok:true——
+  // 静默错正是它最危险的地方，所以必须有判据在盯。
+  { 名: '自启 删掉 %TEMP% 硬拦（静默把自启注册进临时解压目录）',
+    档: 'server/lib/自启.js', 测: 'node test/自启.test.js',
+    找: '    if (v === 临 || v.startsWith(临 + path.sep)) {',
+    换: '    if (false) {' },
+  // 编码两处。08-29 04:05 真机实测：这两处任一犯病，schtasks 就收到坏路径／坏任务名，
+  // 而 dry 判据全程绿——**病只在真跑命令行那一段发作**，所以判据⑤必须真注册一次。
+  { 名: '自启 跑() 去掉 chcp 65001（中文过 cmd 命令行被 GBK 化）',
+    档: 'server/lib/自启.js', 测: 'node test/自启.test.js',
+    找: "  const r = spawnSync('chcp 65001 >nul & ' + cmd, { shell: true, encoding: 'utf8', windowsHide: true });",
+    换: "  const r = spawnSync('cmd.exe', ['/d', '/s', '/c', cmd], { encoding: 'utf8', windowsHide: true });" },
+  // 互保两处。08-29 04:5x：塔那条目标在 exe 里被静默丢掉，杀塔五分钟无人来扶。
+  { 名: '互保 不走计划任务，退回自己 spawn 命令',
+    档: 'server/lib/互保.js', 测: 'node test/互保.test.js',
+    找: '  if (目标.任务名) {',
+    换: '  if (false) {' },
+  { 名: '互保目标 退回 existsSync 决定要不要摆出来（静默丢边）',
+    档: 'server.js', 测: 'node test/互保.test.js',
+    找: "    键: '塔', 名: '瞭望塔',",
+    换: "    键: '塔x', 名: '瞭望塔'," },
+  // 班次额度闸两处。这道闸失效的代价不是多花钱，是制作人早上打开终端没得用——
+  // 订阅是 5h/周窗口制，夜里烧穿了白天补不回来。
+  { 名: '班次 读不到用量就放行（闸整个失效）',
+    档: 'server/lib/班次.js', 测: 'node test/班次.test.js',
+    找: "    return { 行: false, 因: '拒绝开班：' + 耗.因",
+    换: "    return { 行: true, 因: '拒绝开班：' + 耗.因" },
+  // 08-30 壳统一：导航单一事实源 + 片段模式。
+  // 这一族的失效形态是「新做的页面从主屏看不见」——不报错，没人会发现，已经犯过三次。
+  { 名: '壳 顶栏漏掉一个页签（新页面从标签页那侧也看不见）',
+    档: 'server/render/页.js', 测: 'node test/壳.test.js',
+    找: '    ${页签表.map((t) => (t.主页',
+    换: '    ${页签表.slice(0, 3).map((t) => (t.主页' },
+  { 名: '壳 片段模式不抽主体（整页塞进主页，两套壳叠着）',
+    档: 'server.js', 测: 'node test/壳.test.js',
+    找: '      const m = b.match(/<main class="wrap">([\\s\\S]*?)<\\/main>/);',
+    换: '      const m = null;' },
+  // 08-30 红队站住的两条重级击杀，各自的修法都要能红
+  { 名: '班次 水位不看新鲜度（塔死后拿旧读数当现状，屏上跟新鲜的一样）',
+    档: 'server/lib/班次.js', 测: 'node test/班次.test.js',
+    找: '  if (!Number.isFinite(龄秒) || 龄秒 > 陈旧) {',
+    换: '  if (false) {' },
+  // 08-30 四类班次 + 班次页
+  { 名: '班次 去掉 仅星期 判断（周末巡检天天跑，那就不是周末巡检了）',
+    档: 'server/lib/班次.js', 测: 'node test/班次.test.js',
+    找: '  if (Array.isArray(配.仅星期) && 配.仅星期.length) {',
+    换: '  if (false) {' },
+  { 名: '班次 「今天不跑」与「还没到点」共用一句话（屏上分不开）',
+    档: 'server/lib/班次.js', 测: 'node test/班次.test.js',
+    找: "      return { 到: false, 因: '今天不是它该跑的日子', 不该跑: true };",
+    换: "      return { 到: false, 因: `还没到点（差 0 分钟）` };" },
+  { 名: '班次 「断了」并进「错过」（跑到一半被杀 = 压根没开过）',
+    档: 'server/lib/班次.js', 测: 'node test/班次.test.js',
+    找: '  if (今日.开班条) {',
+    换: '  if (false) {' },
+  { 名: '班次 今日跑过 只认收班（跑崩一次就被重跑一次，崩三次烧三遍）',
+    档: 'server/lib/班次.js', 测: 'node test/班次.test.js',
+    找: '  return (Array.isArray(条们) ? 条们 : []).some((o) => o',
+    换: "  return (Array.isArray(条们) ? 条们 : []).some((o) => o && o.型 === '收班'" },
+  { 名: '班次 挑班次不剔今天跑过的（前一班的补跑窗口把后一班永远挡住）',
+    档: 'server/lib/班次.js', 测: 'node test/班次.test.js',
+    找: "    .filter((c) => c && c.启用 !== false && String(c.话 || '').trim() && !跑过(c.班次))",
+    换: "    .filter((c) => c && c.启用 !== false && String(c.话 || '').trim())" },
+  // 窗口水位闸：首班坐席自己找出来的洞——闸只数自己那本账，看不见真实订阅窗口烧到哪了
+  { 名: '班次 读不到真实水位就放行（额度文件一没，窗口闸等于不存在）',
+    档: 'server/lib/班次.js', 测: 'node test/班次.test.js',
+    找: "  if (!w.读到) return { 行: false, 因: '拒绝开班：' + w.因",
+    换: "  if (!w.读到) return { 行: true, 因: '拒绝开班：' + w.因" },
+  { 名: '班次 窗口水位取第一条而不是最近一条（拿开班时的旧读数当现状）',
+    档: 'server/lib/班次.js', 测: 'node test/班次.test.js',
+    找: '  for (let i = 行.length - 1; i >= 0; i -= 1) {',
+    换: '  for (let i = 0; i < 行.length; i += 1) {' },
+  { 名: '班次 补跑窗口去掉上界（下午开机会莫名跑一班夜班）',
+    档: 'server/lib/班次.js', 测: 'node test/班次.test.js',
+    找: '  if (过分 > 窗) return { 到: false,',
+    换: '  if (false) return { 到: false,' },
+  { 名: '班次 把人在场的交互也算进班次预算（口径错，会提前掐掉夜班）',
+    档: 'server/lib/班次.js', 测: 'node test/班次.test.js',
+    找: "    if (!String(o.来路 || '').startsWith('班次')) continue;   // 人在场的交互不占班次预算",
+    换: '    if (false) continue;' },
+  // 这里一度还有一条「XML 临时文件名改回中文」的变异，实测**不红**——
+  // 有 chcp 65001 在，文件名带不带中文都能注册成功。也就是说 ASCII 文件名不是承重件，
+  // 只是纵深防御。留着变异会让「16 处都有判据盯着」这句话虚一格，故删。
+  // 不红的变异只有两种解释：判据没覆盖，或那处改动本来就不重要。这里是后者。
+
+  // ── 2026-08-31 批一：md.js 扩写 ──
+  // 扩写前实测：设计文档 547 行里 150 行渲染错（27%）。最坏的不是"少了表格"，
+  // 是**围栏里的 - 和 # 被当成列表和标题吃掉**——结构被搅乱。七条各拆一处。
+  { 名: 'md 围栏不再是围栏（里面的 # 和 - 会被当成标题和列表吃掉）',
+    档: 'server/render/md.js', 测: 'node --test test/md渲染.test.js',
+    找: "    const 开围 = 行文.match(/^\\s{0,3}(```+|~~~+)\\s*([^\\s`]*)\\s*$/);",
+    换: '    const 开围 = null;' },
+  { 名: 'md 表格不认（83 行表格全掉进 <p>|）',
+    档: 'server/render/md.js', 测: 'node --test test/md渲染.test.js',
+    找: "    if (行文.includes('|') && i + 1 < 行.length && 是分隔行(行[i + 1])) {",
+    换: '    if (false) {' },
+  { 名: 'md 分隔线掉回段落',
+    档: 'server/render/md.js', 测: 'node --test test/md渲染.test.js',
+    找: "    if (/^\\s{0,3}(-{3,}|\\*{3,}|_{3,})\\s*$/.test(行文)) { 收到(0); 出.push(`<hr${属()}>`); continue; }",
+    换: '    if (false) { 收到(0); continue; }' },
+  { 名: 'md 标题退回只认 h1-h3（18 个 #### 掉进段落）',
+    档: 'server/render/md.js', 测: 'node --test test/md渲染.test.js',
+    找: '    const 题 = 行文.match(/^\\s{0,3}(#{1,6})\\s+(.*)$/);',
+    换: '    const 题 = 行文.match(/^\\s{0,3}(#{1,3})\\s+(.*)$/);' },
+  { 名: 'md 有序列表不认（1. 掉进段落）',
+    档: 'server/render/md.js', 测: 'node --test test/md渲染.test.js',
+    找: '    const 有序 = 行文.trim().match(/^\\d{1,9}[.)]\\s+(.*)$/);',
+    换: '    const 有序 = null;' },
+  { 名: 'md 不剥 BOM（一级标题静默降级成段落，编辑器里还看不见）',
+    档: 'server/render/md.js', 测: 'node --test test/md渲染.test.js',
+    找: "  const 全 = String(md == null ? '' : md).replace(/^\\uFEFF/, '');",
+    换: "  const 全 = String(md == null ? '' : md);" },
+  { 名: 'md 占位符退回可打印形式（正文里的「 C3 」被当成代码槽吃掉）',
+    档: 'server/render/md.js', 测: 'node --test test/md渲染.test.js',
+    找: '  return s.replace(/\\u0000(\\d+)\\u0000/g, (_, i) => 代码槽[Number(i)]);',
+    换: '  return s.replace(/ C(\\d+) /g, (_, i) => 代码槽[Number(i)]);' },
+
+  // ── 2026-08-31 批二：文稿台（文件库 · 只读）──
+  // 终端**无鉴权**，而这是它的第一个写口的门。原 校档名() 至今零判据，
+  // 所以这九条不只是"证明判据有效"，是这个门第一次被证明关得上。
+  { 名: '文稿 校路径 不拦上跳段（../ 直接读到根外，无鉴权下最直接的那条）',
+    档: 'server/lib/文稿.js', 测: 'node --test test/文稿.test.js',
+    找: "  if (s.split('/').some((seg) => seg === '..')) return { 行: false, 因: '路径含上跳段' };",
+    换: "  if (false) return { 行: false, 因: '路径含上跳段' };" },
+  { 名: '文稿 校路径 不判 realpath 落根内（软链跳出根即失守）',
+    档: 'server/lib/文稿.js', 测: 'node --test test/文稿.test.js',
+    找: "  if (!在根内(真根, 真档)) return { 行: false, 因: '解析后落在根之外（软链或上跳）' };",
+    换: "  if (false) return { 行: false, 因: '解析后落在根之外（软链或上跳）' };" },
+  { 名: '文稿 校路径 照抄 校档名 的写法（realpath 文件而非父目录 → 新建路天然失效）',
+    档: 'server/lib/文稿.js', 测: 'node --test test/文稿.test.js',
+    找: '    真父 = 真解(path.dirname(拼));',
+    换: '    真父 = path.dirname(真解(拼));' },
+  { 名: '文稿 可写 不看禁写前缀（活存储放开写，runner 状态错乱且 git 还原不回）',
+    档: 'server/lib/文稿.js', 测: 'node --test test/文稿.test.js',
+    找: '  for (const 禁 of (根.禁写 || [])) {',
+    换: '  for (const 禁 of []) {' },
+  { 名: '文稿 可写 禁写用 includes 而不是段前缀（活区 会连坐 活区补）',
+    档: 'server/lib/文稿.js', 测: 'node --test test/文稿.test.js',
+    找: "    if (s === p || s.startsWith(p + '/')) {",
+    换: '    if (s.includes(p)) {' },
+  { 名: '文稿 扫记号 不挖行内代码（把说明表那四行当成四条待办）',
+    档: 'server/lib/文稿.js', 测: 'node --test test/文稿.test.js',
+    找: "    const 净 = l.replace(/`[^`]*`/g, (m) => ' '.repeat(m.length));",
+    换: '    const 净 = l;' },
+  { 名: '文稿 扫记号 不管围栏（示例代码里的记号被算成待办）',
+    档: 'server/lib/文稿.js', 测: 'node --test test/文稿.test.js',
+    找: '    if (在围栏) continue;',
+    换: '    if (false) continue;' },
+  { 名: '文稿 列举 不做目录剪枝（TK 的 1323 个 PackageCache README 涌进文件库）',
+    档: 'server/lib/文稿.js', 测: 'node --test test/文稿.test.js',
+    找: '          if (剪.has(it.name.toLowerCase())) continue;',
+    换: '          if (false) continue;' },
+  { 名: '文稿 读盘不剥 BOM（每存一次 BOM 搬一次家，首行标题静默降级）',
+    档: 'server/lib/文稿.js', 测: 'node --test test/文稿.test.js',
+    找: '  if (有BOM) s = s.slice(1);',
+    换: '  if (false) s = s.slice(1);' },
+  // 片段不带脚本 = 四个页面的前端在壳里全哑（原始流/监视/席间存照/文稿）。
+  // 这个病的表现是「页面在，但不动」——不报错、不白屏，只是什么都不发生。
+  { 名: '片段不把 <script> 的 src 带出来（四页前端在壳里全哑，且不报错）',
+    档: 'server.js', 测: 'node --test test/壳.test.js',
+    找: "        const 属 = 脚.length ? ` data-脚本=\"${脚.join(' ')}\"` : '';",
+    换: "        const 属 = '';" },
+
+  // ── 2026-08-31 批三：写口 + 锁 + 版本 ──
+  // 这一批是终端**第一个写口**。此前它对外纯只读，所以下面这些不是「功能有没有做对」，
+  // 是「无鉴权的机器上，任何网页能不能改你的文件」。
+  { 名: '锁 租约不失效（浏览器崩了/进程被杀 → 盘上留一把谁也解不开的死锁）',
+    档: 'server/lib/文锁.js', 测: 'node --test test/文锁.test.js',
+    找: "  if (剩 <= 0) return { 态: '过期', 剩余毫秒: 0, 闲置毫秒: 现在 - 键时 };",
+    换: "  if (false) return { 态: '过期', 剩余毫秒: 0, 闲置毫秒: 现在 - 键时 };" },
+  { 名: '锁 闲置不降级（点了编辑就去睡 → 我一整夜动不了那份文件）',
+    档: 'server/lib/文锁.js', 测: 'node --test test/文锁.test.js',
+    找: "  if (现在 - 键时 >= 闲置毫秒) return { 态: '可抢', 剩余毫秒: 剩, 闲置毫秒: 现在 - 键时 };",
+    换: "  if (false) return { 态: '可抢', 剩余毫秒: 剩, 闲置毫秒: 现在 - 键时 };" },
+  { 名: '锁 可写不校令牌（谁都能写别人锁着的文件）',
+    档: 'server/lib/文锁.js', 测: 'node --test test/文锁.test.js',
+    找: '  if (!令 || 令 !== 条.令牌) return { 行: false, 因: `文件被 ${条.持有者 || \'别人\'} 锁着`, 态: t.态 };',
+    换: '  if (false) return { 行: false, 因: `文件被 ${条.持有者 || \'别人\'} 锁着`, 态: t.态 };' },
+  { 名: '锁 外部进程看不见（坐席与 hook 的闸失效，锁只剩装饰）',
+    档: 'server/lib/文锁.js', 测: 'node --test test/文锁.test.js',
+    找: "        if (t.态 === '持有' || t.态 === '可抢') {",
+    换: '        if (false) {' },
+  { 名: '草稿 只落哈希不落 base 字节（冲突时「保留我的」在数据模型里不存在）',
+    档: 'server/lib/文锁.js', 测: 'node --test test/文锁.test.js',
+    找: "        原子写(底 + '.base.md', String(基文));",
+    换: '        void 基文;' },
+  { 名: '版本 从净化过的文件名回读「谁写的」（班次:晨报 与 班次_晨报 撞成一个）',
+    档: 'server/lib/文锁.js', 测: 'node --test test/文锁.test.js',
+    找: '        const o = 由索引.get(f);',
+    换: '        const o = null;' },
+  { 名: '版本环无上界（又一处无界增长，欠账表第 10 条已经有一处了）',
+    档: 'server/lib/文锁.js', 测: 'node --test test/文锁.test.js',
+    找: '      const 删掉 = 们.slice(0, Math.max(0, 们.length - 版本上限));',
+    换: '      const 删掉 = [];' },
+  { 名: '告示 过期的锁也挂着（坐席每条对话都收到一堆早就没了的占用）',
+    档: 'server/lib/文锁.js', 测: 'node --test test/文锁.test.js',
+    找: "    .filter(([, c]) => 判态(c, 现在).态 !== '过期')",
+    换: '    .filter(() => true)' },
+  { 名: '写闸 放行 text/plain（那条 no-cors 攻击直接打进来）',
+    档: 'server/lib/写闸.js', 测: 'node --test test/写闸.test.js',
+    找: '  if (!/^application\\/json\\b/.test(类型)) {',
+    换: '  if (false) {' },
+  { 名: '写闸 缺 Origin 就放行（"判不出来就放行"＝没有闸）',
+    档: 'server/lib/写闸.js', 测: 'node --test test/写闸.test.js',
+    找: "  if (!来源) return { 行: false, 码: 403, 因: '缺 Origin' };",
+    换: "  if (!来源) return { 行: true, 码: 200, 因: '缺 Origin' };" },
+  { 名: '写闸 令牌台无上限（常驻整天开着 = 一处内存泄漏）',
+    档: 'server/lib/写闸.js', 测: 'node --test test/写闸.test.js',
+    找: '      while (们.size > 令牌上限) 们.delete(们.keys().next().value);',
+    换: '      void 令牌上限;' },
+  { 名: '写口 冲突时照样覆盖（制作人 25 分钟的手工标注静默消失）',
+    档: 'server/routes/文稿页.js', 测: 'node --test test/写口.test.js',
+    找: '    if (!基纹 || 基纹 !== 盘纹) {',
+    换: '    if (false) {' },
+  { 名: '写口 落盘不还原换行（一次保存 547 行全变改动行，标了哪几处被淹掉）',
+    档: 'server/routes/文稿页.js', 测: 'node --test test/写口.test.js',
+    找: "    if (原 && 原.换行 === 'crlf') s = s.replace(/\\n/g, '\\r\\n');",
+    换: '    void 原;' },
+  { 名: '写口 落盘不还原 BOM',
+    档: 'server/routes/文稿页.js', 测: 'node --test test/写口.test.js',
+    找: "    if (原 && 原.有BOM) s = '\\uFEFF' + s;",
+    换: '    void 0;' },
+  { 名: '写口 不落版本（改了没有回头路，且坐席的改动在历史里隐形）',
+    档: 'server/routes/文稿页.js', 测: 'node --test test/写口.test.js',
+    找: "    const 版 = 锁台.存版(位.根键, 位.相对, 文, String(req.body.谁 || '制作人'));",
+    换: "    const 版 = { 版: '没存' };" },
+  { 名: '写口 不判写权（活存储也能写，runner 状态错乱且 git 还原不回）',
+    档: 'server/routes/文稿页.js', 测: 'node --test test/写口.test.js',
+    找: '      if (!写.行) { res.status(403).json({ 行: false, 因: 写.因 }); return null; }',
+    换: '      void 写;' },
+  { 名: '解锁请求不进人闸队列（我在等你解锁，而你屏上看不到）',
+    档: 'server.js', 测: 'node --test test/写口.test.js',
+    找: '  const 本地 = 文稿闸债();',
+    换: '  const 本地 = [];' },
+
+  // ── 2026-08-31 批四：编辑器 ──
+  { 名: '存盘后清掉 base 而不是重置（第二次冲突拿不到比较基准，「保留我的」退化成盲覆盖）',
+    档: 'server/routes/文稿页.js', 测: 'node --test test/写口.test.js',
+    找: '    锁台.重置基(位.根键, 位.相对, 文, 锁lib.指纹(文));',
+    换: '    锁台.清草(位.根键, 位.相对);' },
+  // 这里一度有一条「重新取锁不重设 base」的变异，2026-08-31 验收复核后**实测不红**。
+  // 原因是那次复核之后补的两处改动把它顶掉了：存草() 现在会在基指纹变化时重写 base，
+  // 而 /api/doc/save 的 能三路 又加了「指纹(base) === 基纹」的校验。
+  // 于是取锁时那次重设不再是正确性的承重件——少了它最坏也只是 能三路 退化成 false
+  // （诚实地说「给不出三路」），不会给出一张指着错地方的差异图。
+  // 不红的变异只有两种解释：判据没覆盖，或那处改动本来就不重要。这里是后者。
+  // 那一行留着是纵深（少一次退化），不是承重，所以不为它硬造一条变异。
+  { 名: '过时草稿不带自己的基准回来（载入后存盘静默盖掉别人的改动，连冲突框都不弹）',
+    档: 'server/routes/文稿页.js', 测: 'node --test test/写口.test.js',
+    找: '        ? { 文: 草.文, 时: 草.时, 同源: 草.基指纹 === 纹, 基指纹: 草.基指纹, 基文: 草.基文 }',
+    换: '        ? { 文: 草.文, 时: 草.时, 同源: 草.基指纹 === 纹 }' },
+  { 名: '文件库不排掉文稿台自己的工作目录（版本历史涌进左栏，存一次多一条）',
+    档: 'server/lib/文稿.js', 测: 'node --test test/文稿.test.js',
+    找: '          if (排.some((p) => g === p || g.startsWith(p + \'/\'))) continue;',
+    换: '          void 排;' },
+
+  // ── 2026-08-31 验收复核确证的六条，各配一处变异 ──
+  // 「草稿裸写不原子」这条变异**做不出来**，明写在这里而不是含糊过去：
+  // 原子写的收益只在「进程死在写到一半」那一刻显现，而那一刻在同进程的判据里演不出来。
+  // 守⑭e 能验的只是「不留 .tmp」——把原子写改成裸写反而没有 .tmp，判据会绿。
+  // 真正兜住这条病的是 守⑭c（**半截草稿不许被当成完整的**），
+  // 它的承重件是 取草() 里那句 草纹 校验，由下面那条变异盯着。
+  // 所以：原子写记为**结构性防御、无行为判据**——盲区明写，不假装覆盖。
+  { 名: '取草不校验字节（半个 markdown 看着仍像一份 markdown）',
+    档: 'server/lib/文锁.js', 测: 'node --test test/文锁.test.js',
+    找: '        if (稿 != null && 元.草纹 && 指纹(稿) !== 元.草纹) { 稿 = null; 损 = true; }',
+    换: '        void 元;' },
+  { 名: '重置基 直接删草稿而不是留孤儿（元信息坏了就把完整草稿销毁）',
+    档: 'server/lib/文锁.js', 测: 'node --test test/文锁.test.js',
+    找: "          fs.renameSync(底 + '.draft.md', `${底}.orphan-${Date.now()}.md`);",
+    换: "          fs.unlinkSync(底 + '.draft.md');" },
+  { 名: '存草 的 base 退回 existsSync 守卫（base 永不更新，冲突面板拿两代前的版本画差异）',
+    档: 'server/lib/文锁.js', 测: 'node --test test/文锁.test.js',
+    找: "      if (基文 != null && (!fs.existsSync(底 + '.base.md') || !旧元 || 旧元.基指纹 !== 基指纹)) {",
+    换: "      if (基文 != null && !fs.existsSync(底 + '.base.md')) {" },
+  { 名: '锁键不折叠大小写（同一份文件裂出第二把「独占」锁）',
+    档: 'server/lib/文锁.js', 测: 'node --test test/文锁.test.js',
+    找: "const 键 = (根键, 相对) => `${根键}/${String(相对).replace(/\\\\/g, '/')}`.toLowerCase();",
+    换: "const 键 = (根键, 相对) => `${根键}/${String(相对).replace(/\\\\/g, '/')}`;" },
+  { 名: '告示又声称有硬闸（说给坐席听的谎，而那道闸零调用点）',
+    档: 'server/lib/文锁.js', 测: 'node --test test/文锁.test.js',
+    找: "    + '\\n（这是约定，**不是机器闸**：你写了不会被拒，但会覆盖制作人正在改的东西，'",
+    换: "    + '\\n（硬拦在 server 侧，写了也会被拒。'" },
+  { 名: '冲突时不先存盘上那版（「保留我的」的承诺每一次都是假的）',
+    档: 'server/routes/文稿页.js', 测: 'node --test test/写口.test.js',
+    找: "        锁台.存版(位.根键, 位.相对, 现.文, '盘上原版·外部写入');",
+    换: '        void 现;' },
+  { 名: '能三路 只判 base 非空（假的 true 会把「盲覆盖」那条警告抑制掉）',
+    档: 'server/routes/文稿页.js', 测: 'node --test test/写口.test.js',
+    找: '      const 基对 = !!(草.有 && 草.基文 != null && 锁lib.指纹(草.基文) === 基纹);',
+    换: '      const 基对 = !!(草.有 && 草.基文 != null);' },
+  { 名: '基指纹为空就跳过冲突比对（不经前端的调用方一次静默全覆盖）',
+    档: 'server/routes/文稿页.js', 测: 'node --test test/写口.test.js',
+    找: '    if (!基纹 || 基纹 !== 盘纹) {',
+    换: '    if (基纹 && 基纹 !== 盘纹) {' },
+  { 名: 'version-keep 不校锁（谁都能往版本环里塞东西）',
+    档: 'server/routes/文稿页.js', 测: 'node --test test/写口.test.js',
+    找: "    const 判 = 锁lib.可写(锁台.条(位.根键, 位.相对), String(req.body.令牌 || ''));\n    if (!判.行) return res.status(409).json({ 行: false, 因: 判.因 });\n    const v = 锁台.存版(",
+    换: '    const v = 锁台.存版(' },
+];
+
+const 跑 = (命令 = 'node test/m1a.test.js') => {
+  try {
+    const out = cp.execSync(命令, { cwd: 根, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    return { 红: false, 尾: out.trim().split('\n').pop().trim() };
+  } catch (e) {
+    const 全 = String(e.stdout || '') + String(e.stderr || '');
+    const m = 全.match(/✗[^\n]*/) || 全.match(/AssertionError[^\n]*/);
+    return { 红: true, 尾: (m ? m[0] : '(未捕获)').replace(/\s+/g, ' ').slice(0, 76) };
+  }
+};
+
+const 判据命令 = [...new Set(变异.map((m) => m.测 || 'node test/m1a.test.js'))];
+const 基线 = 判据命令.map((命令) => ({ 命令, ...跑(命令) }));
+for (const b of 基线) console.log('基线:', b.命令, b.红 ? '✗ 变异前就红 —— 先修' : '✓ 绿 ' + b.尾);
+if (基线.some((b) => b.红)) process.exit(1);
+
+let 全过 = true;
+for (const m of 变异) {
+  const p = path.join(根, m.档);
+  const 原 = fs.readFileSync(p, 'utf8');
+  if (!原.includes(m.找)) { console.log('  ⚠', m.名, '— 锚点没命中，判据未被证明'); 全过 = false; continue; }
+  fs.writeFileSync(p, 原.replace(m.找, m.换), 'utf8');
+  const r = 跑(m.测);
+  fs.writeFileSync(p, 原, 'utf8');
+  const 还原ok = fs.readFileSync(p, 'utf8') === 原;
+  console.log(' ', r.红 ? '✓' : '✗', m.名, '→', r.红 ? '翻红：' + r.尾 : '**判据没红——它没在验这件事**', 还原ok ? '' : '（还原失败！）');
+  if (!r.红 || !还原ok) 全过 = false;
+}
+
+const 收尾 = 判据命令.map((命令) => ({ 命令, ...跑(命令) }));
+for (const b of 收尾) console.log('\n还原后复跑:', b.命令, b.红 ? '✗ 仍红' : '✓ 绿 ' + b.尾);
+console.log(全过 && !收尾.some((b) => b.红)
+  ? `自证能红：全部通过 —— ${变异.length} 处实现各自都有判据盯着`
+  : '自证能红：有未通过项，判据不合格');
+process.exit(全过 && !收尾.some((b) => b.红) ? 0 : 1);

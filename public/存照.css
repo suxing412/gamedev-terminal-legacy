@@ -1,0 +1,107 @@
+@import url("tokens.css");
+
+/* 存照.css — 席间存照
+ *
+ * Operate 取向：这是查档的页面，不是仪表盘。密度照 Datadog、排版照 Linear。
+ *
+ * 贯穿全文件的一条：**判不准的分类只决定「先展开还是先折叠」，绝不决定「显示或不显示」。**
+ * 所以折叠态也是一整行、有发言人有时刻有首句——它是被压扁的，不是被藏起来的。
+ */
+
+.cz-wrap {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: var(--s5);
+  align-items: start;
+}
+.cz-side, .cz-main { min-width: 0; }
+
+/* ── 左：坐席 ── */
+.cz-side h2 { font-size: 13px; font-weight: 600; color: var(--ink-2); margin-bottom: var(--s2); }
+.cz-seats { list-style: none; display: grid; gap: 1px; background: var(--line-soft); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.cz-seat {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--s2); align-items: center;
+  padding: var(--s2) var(--s3); background: var(--panel);
+}
+.cz-seat i { width: 5px; height: 5px; border-radius: 50%; background: var(--live); }
+.cz-seat.off i { background: transparent; box-shadow: inset 0 0 0 1px var(--ink-3); }
+.cz-seat .n { font-size: 12.5px; color: var(--ink); font-weight: 500; }
+.cz-seat.off .n { color: var(--ink-3); font-weight: 400; }
+.cz-seat .c { font: 400 11px var(--mono); color: var(--ink-3); }
+.cz-seats .hint { padding: var(--s2) var(--s3); background: var(--panel); color: var(--ink-3); font-size: 12px; }
+.cz-note { margin-top: var(--s3); color: var(--ink-3); font-size: 11px; line-height: 1.65; }
+
+/* ── 右：条目流 ── */
+.cz-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s4);
+  padding: var(--s2) var(--s4); margin-bottom: var(--s3);
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+}
+.cz-bar .n { font: 400 12px var(--mono); color: var(--ink-3); }
+.cz-tog { font-size: 12px; color: var(--ink-2); text-decoration: none; border-bottom: 1px solid var(--line); }
+.cz-tog:hover { color: var(--ink); border-bottom-color: var(--ink-2); }
+
+.cz-warn {
+  color: var(--warn); font: 400 12px var(--mono);
+  background: color-mix(in oklch, var(--warn) 8%, transparent);
+  border-radius: 6px; padding: var(--s2) var(--s3); margin-bottom: var(--s3);
+}
+.cz-more { display: inline-block; margin-bottom: var(--s3); font-size: 12.5px; color: var(--ink-3); text-decoration: none; border-bottom: 1px solid var(--line); }
+.cz-more:hover { color: var(--ink); }
+
+.cz-list { list-style: none; display: grid; gap: 1px; background: var(--line-soft); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.cz-i { background: var(--panel); padding: var(--s3) var(--s4); min-width: 0; }
+.cz-i .hd { display: flex; align-items: baseline; gap: var(--s2); margin-bottom: var(--s2); }
+.cz-i .who { font-size: 13px; font-weight: 500; color: var(--ink); }
+.cz-i time { font: 400 11px var(--mono); color: var(--ink-3); }
+.cz-i .tag { font: 400 10px var(--mono); color: var(--ink-3); border: 1px solid var(--line); border-radius: 3px; padding: 0 5px; }
+.cz-i .bd { font-size: 13.5px; line-height: 1.75; color: var(--ink-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* 折叠只是压扁，不是藏起来：发言人、时刻、首句都还在，一眼能认出是什么 */
+.cz-i.fold {
+  display: grid; grid-template-columns: 62px 54px minmax(0, 1fr);
+  gap: var(--s2); align-items: baseline;
+  padding: var(--s2) var(--s4);
+}
+.cz-i.fold .who { font-size: 12px; font-weight: 400; color: var(--ink-3); }
+.cz-i.fold .txt { font-size: 12px; color: var(--ink-3); overflow-wrap: anywhere; }
+
+/* 产出物标记：一行摘要。它是标记不是抽屉——正文照旧在下面，没有被移走 */
+.art-b {
+  display: inline-block; margin-bottom: var(--s2);
+  font: 400 11.5px var(--mono); color: var(--ink-2);
+  background: var(--raised); border: 1px solid var(--line); border-radius: 5px;
+  padding: 3px var(--s2);
+}
+
+/* 长正文折叠：按逻辑行判是否要折（服务端定），这里只管视觉高度。
+   两件事分开——逻辑行机器判得了，视觉行依赖字体视口浏览器，判不了。 */
+.cz-i .bd.clip { max-height: 9.5em; overflow: hidden; position: relative; }
+.cz-i .bd.clip::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3em;
+  background: linear-gradient(to bottom, transparent, var(--panel));
+}
+.cz-i .bd.open { max-height: none; }
+.cz-i .bd.open::after { display: none; }
+.cz-i .more {
+  margin-top: var(--s2); font: 400 12px var(--sans); color: var(--ink-3);
+  background: transparent; border: none; border-bottom: 1px solid var(--line);
+  padding: 0 0 1px; cursor: pointer;
+}
+.cz-i .more:hover { color: var(--ink); }
+.cz-i .more:focus-visible { outline: 2px solid var(--gate); outline-offset: 2px; }
+
+.cz-err { max-width: 60ch; border: 1px solid var(--line); border-radius: 10px; padding: var(--s5); background: var(--panel); }
+.cz-err h1 { font-size: 18px; font-weight: 600; margin-bottom: var(--s3); }
+.cz-err p { color: var(--ink-2); font-size: 13.5px; margin-bottom: var(--s2); }
+.cz-err .hint { color: var(--ink-3); }
+.cz-err code { font: 400 12.5px var(--mono); color: var(--ink-2); }
+
+@media (max-width: 900px) {
+  .cz-wrap { grid-template-columns: 1fr; }
+  .cz-i.fold { grid-template-columns: 54px minmax(0, 1fr); }
+  .cz-i.fold time { display: none; }
+}
+
+.cz-h2b { margin-top: var(--s4); }

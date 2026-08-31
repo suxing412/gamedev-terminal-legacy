@@ -1,0 +1,356 @@
+/* 游戏开发者终端 · 坐席
+ *
+ * 世界：类别标准全力执行（制作人 2026-08-26 拍板的常设出口）。排版手艺照 Linear，
+ * 密度与状态色照 Datadog。不玩隐喻，不夹带私货——这是要用十年的值班屏。
+ *
+ * 色彩策略：Restrained。中性色铺满，**一个强调色只干一件事：标人闸**。
+ * 别处一律中性，于是"谁在等我"永远有唯一的视觉出口。
+ *
+ * 场景句：夜里十一点半的书房，只有一盏侧灯，眼睛已经用了六小时。
+ * → 近黑带极低冷灰（不是纯黑，纯黑配亮字是长时间注视的酷刑）。
+ */
+
+@import url("tokens.css");
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  overflow: hidden; /* 全屏常驻：整页不滚动，滚动只发生在栏内 */
+}
+
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font: 400 14px/1.55 var(--sans);
+  font-feature-settings: "tnum" 1; /* 数字等宽：值班屏的数字会跳，不能让它们抖动布局 */
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ══ 骨架：三栏 ══ */
+.台 {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr) 300px;
+  grid-template-rows: 44px minmax(0, 1fr);
+  height: 100vh;
+}
+/* 凭据过期时顶条下面挤出一行；不过期时这一行根本不存在（hidden ⇒ display:none） */
+.台:has(.凭幅:not([hidden])) { grid-template-rows: 44px auto minmax(0, 1fr); }
+
+.凭幅 {
+  grid-column: 1 / -1;
+  display: flex; align-items: center; gap: var(--s3);
+  padding: var(--s3) var(--s5);
+  background: var(--gate-wash);
+  border-bottom: 1px solid var(--gate-deep);
+  font-size: 13px; color: var(--ink);
+}
+.凭幅 code {
+  font: 400 12px var(--mono);
+  background: var(--ground); color: var(--ink);
+  padding: 3px 8px; border-radius: 4px;
+  border: 1px solid var(--line);
+  user-select: all; /* 一次点选整条，省得拖选漏字符 */
+}
+.凭幅 button {
+  margin-left: auto;
+  padding: 4px 12px; border-radius: 4px;
+  border: 1px solid var(--line); background: var(--raised);
+  color: var(--ink); font: inherit; font-size: 12px; cursor: pointer;
+}
+.凭幅 button:hover { border-color: var(--gate); }
+
+/* ── 顶条：唯一的全宽元素，只放身份与总况 ── */
+.顶 {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: var(--s5);
+  padding: 0 var(--s5);
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.徽 { font-size: 13px; font-weight: 600; letter-spacing: 0.02em; }
+.徽 span { color: var(--ink-3); font-weight: 400; margin-left: var(--s2); }
+/* 去别处的路：紧跟徽标，不进 .顶况（那一栏是**读数**，混进跳转链接会让人以为数字也能点）。
+   坐席是值班屏、整页不滚，这三个链接是屏上唯一的离场口，所以要一眼看得见、又不能抢读数的位。 */
+.去 { display: flex; gap: var(--s3); font-size: 12px; }
+.去 a {
+  color: var(--ink-3); text-decoration: none;
+  padding: 2px var(--s2); border-radius: 4px;
+}
+.去 a:hover { background: var(--raised); color: var(--ink); }
+/* 当前视图要看得出来。**不用下划线也不用色块**——顶栏那一行字很小，
+   底部一条 1px 的琥珀线是这套里最轻的「在这儿」，不会把顶栏变成一排按钮。 */
+.去 a.在 {
+  color: var(--ink);
+  box-shadow: inset 0 -1px 0 var(--gate);
+  border-radius: 4px 4px 0 0;
+}
+
+/* **`hidden` 对设了 display 的元素不生效。**
+   `.话流 { display: flex }` 是类选择器，盖过浏览器默认表里的 `[hidden] { display: none }`，
+   于是切到视图时话流仍然画在屏上，两块内容叠着——JS 报 hidden=true，眼睛看见的却是两份。
+   这类「属性设了但没生效」的错不报任何异常，只能靠看出来。 */
+.话流[hidden], .视图区[hidden] { display: none; }
+
+/* ── 视图区：与话流互斥，占同一格 ──────────────────────────
+   页签换的是这一格，不是整页。座条与说区在它上下方，不参与切换——
+   一边看班次报告一边说话是常态；把输入框也换走就等于「读东西时不能说话」。 */
+.视图区 {
+  flex: 1; min-height: 0; overflow-y: auto;
+  background: var(--ground);
+}
+/* 片段自带 .视图（由服务端片段模式包上），各页样式表里的 `body, .视图` 与
+   `.wrap, .视图` 两条把排版接过去。这里只管它在这一格里怎么放。 */
+.视图区 > .视图 { min-height: 100%; }
+
+.视载, .视错 {
+  padding: var(--s6) var(--s5);
+  color: var(--ink-3); font-size: 13.5px;
+  max-width: 72ch; margin-inline: auto;
+}
+/* 取不到就说取不到，并给一条能自己走通的路。
+   **不留白**：值班屏上一块空白等于「程序坏了」，而它其实只是这一次没取到。 */
+.视错 a { color: var(--gate); margin-left: var(--s2); }
+
+.顶况 { margin-left: auto; display: flex; gap: var(--s5); font: 400 12px/1 var(--mono); color: var(--ink-2); }
+.顶况 b { color: var(--ink); font-weight: 500; }
+.脉 { width: 6px; height: 6px; border-radius: 50%; background: var(--idle); display: inline-block; }
+.脉.活 { background: var(--live); }
+.脉.断 { background: var(--gate-deep); }
+
+/* ── 左栏：人闸。这一栏永不参与信息流滚动 ── */
+.闸栏 {
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.栏头 {
+  display: flex; align-items: baseline; gap: var(--s2);
+  padding: var(--s4) var(--s4) var(--s3);
+  border-bottom: 1px solid var(--line-soft);
+}
+.栏头 h2 { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: var(--ink-2); }
+.栏头 .数 { font: 500 12px var(--mono); color: var(--ink-3); margin-left: auto; }
+.闸列 { overflow-y: auto; flex: 1; min-height: 0; }
+
+.闸 {
+  display: block; width: 100%; text-align: left;
+  padding: var(--s3) var(--s4);
+  border: 0; border-bottom: 1px solid var(--line-soft);
+  background: transparent; color: inherit; font: inherit;
+  cursor: pointer;
+  transition: background 120ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.闸:hover { background: var(--raised); }
+.闸:focus-visible { outline: 2px solid var(--gate); outline-offset: -2px; }
+.闸 .行1 { display: flex; align-items: baseline; gap: var(--s2); }
+.闸 .号 { font: 500 12px var(--mono); color: var(--gate); }
+.闸 .久 { margin-left: auto; font: 400 11px var(--mono); color: var(--ink-3); }
+.闸 .题 { display: block; margin-top: 3px; font-size: 13px; color: var(--ink); line-height: 1.4; }
+.闸 .谁 { display: block; margin-top: 2px; font-size: 11px; color: var(--ink-3); }
+
+/* 逾期：加重而不闪。三档，越久越实 */
+.闸.久1 { background: var(--gate-wash); }
+.闸.久1 .久 { color: var(--gate); }
+.闸.久2 { background: var(--gate-wash); }
+.闸.久2 .久 { color: var(--gate-deep); font-weight: 600; }
+.闸.久2 .号 { color: var(--gate-deep); }
+
+/* 组头：粘在滚动区顶部，滚到哪都知道现在看的是哪一组 */
+.组头 {
+  position: sticky; top: 0; z-index: 1;
+  display: flex; align-items: baseline; gap: var(--s2);
+  padding: var(--s3) var(--s4) var(--s2);
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  font-size: 11px; font-weight: 600; letter-spacing: 0.06em; color: var(--ink-3);
+}
+.组头 b { font: 500 11px var(--mono); color: var(--ink-2); }
+.组头 span { margin-left: auto; font-weight: 400; letter-spacing: 0; color: var(--ink-3); }
+
+/* 机制条：没有单号也没有钟，靠「第 N 条 + 该怎么处理」定位 */
+.闸.机 .号 { color: var(--ink-2); }
+.闸.机 .久 { color: var(--gate); }
+
+.空态 { padding: var(--s6) var(--s4); color: var(--ink-2); font-size: 13px; line-height: 1.6; }
+.空态 b { display: block; color: var(--ink); font-weight: 500; margin-bottom: var(--s1); }
+
+/* ── 中栏：对话主体 ── */
+.话栏 { display: flex; flex-direction: column; min-height: 0; background: var(--ground); }
+
+/* ── 在座条：八席常驻可见，点名字开私聊（2026-08-29 制作人拍板）──
+   放在对话之上而不是侧边：这屋里有谁，是「状态先于叙述」的一部分，
+   得不用点、不用滚就看得见（PRODUCT.md 设计原则 1）。 */
+.座条 {
+  display: flex; align-items: center; gap: var(--s3);
+  padding: var(--s2) var(--s5);
+  border-bottom: 1px solid var(--line);
+  background: var(--ground);
+  flex: 0 0 auto;
+}
+.座组 { display: flex; flex-wrap: wrap; gap: 2px; min-width: 0; }
+.座 {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 9px; border-radius: 6px;
+  border: 1px solid transparent; background: transparent;
+  color: var(--ink-2); font: 400 12px var(--sans); cursor: pointer;
+  transition: background 140ms cubic-bezier(0.16, 1, 0.3, 1), color 140ms;
+}
+.座:hover { background: var(--raised); color: var(--ink); }
+.座:focus-visible { outline: 2px solid var(--gate); outline-offset: 1px; }
+.座[disabled] { color: var(--ink); cursor: default; font-weight: 500; }
+.座[disabled]:hover { background: transparent; }
+.座 .座灯 { width: 5px; height: 5px; border-radius: 50%; background: var(--live); flex: none; }
+/* 未接模型的席位不许装作能说话——灯空心、字压暗、标出来 */
+.座.未接 { color: var(--ink-3); }
+.座.未接 .座灯 { background: transparent; box-shadow: inset 0 0 0 1px var(--ink-3); }
+.座.未接 em { font-style: normal; font-size: 10px; color: var(--ink-3); }
+/* 选中＝正在私聊这一位 */
+.座.选 { background: var(--gate-wash); border-color: var(--gate); color: var(--gate); }
+.座.选 .座灯 { background: var(--gate); }
+.座注 { margin-left: auto; color: var(--ink-3); font-size: 11px; white-space: nowrap; }
+.座读不到 { color: var(--ink-3); font-size: 12px; border: 1px dashed var(--line); border-radius: 5px; padding: 2px 8px; }
+
+/* 私聊态：整栏压一道暖色顶边，一眼看出「现在说的话只有一个人听得见」 */
+.台.私聊中 .话栏 { box-shadow: inset 0 2px 0 var(--gate); }
+
+@media (prefers-reduced-motion: reduce) { .座 { transition: none; } }
+.话流 {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: var(--s5) var(--s6);
+  display: flex; flex-direction: column; gap: var(--s5);
+}
+/* 阅读列居中：中栏在 2560 上有 1900+ px，把 72ch 的文字贴着左边缘会显得像残缺的一条。
+   auto 边距在 flex 列里生效，于是这一列自己找到中线，两侧留白对称。 */
+.话 { max-width: 72ch; width: 100%; margin-inline: auto; } /* 长行是长时间阅读的敌人 */
+.话 .谁 {
+  font: 500 11px/1 var(--mono);
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+  margin-bottom: var(--s2);
+}
+/* 说话人靠字重与明度分，**不靠强调色**。琥珀一旦也表示"这句是你说的"，
+   一眼扫过去就再也不能凭颜色断定"有人在等我"了——那是这块屏唯一不能失守的信号。 */
+.话.我 .谁 { color: var(--ink-2); font-weight: 600; }
+.话 .文 { white-space: pre-wrap; word-break: break-word; color: var(--ink); }
+.话.我 .文 { color: var(--ink-2); }
+.话 .文 code { font: 400 13px var(--mono); background: var(--raised); padding: 1px 5px; border-radius: 3px; }
+
+.在跑 { display: inline-flex; align-items: center; gap: var(--s2); color: var(--ink-3); font-size: 13px; }
+.在跑 i {
+  width: 5px; height: 5px; border-radius: 50%; background: var(--gate);
+  animation: 呼吸 1.4s ease-in-out infinite;
+}
+@keyframes 呼吸 { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+.说区 { border-top: 1px solid var(--line); padding: var(--s4) var(--s6) var(--s5); background: var(--panel); }
+/* 说话区与上方阅读列共用同一条中线——输入框错开正文会让整栏看起来是两个东西 */
+.说心 { max-width: 72ch; margin-inline: auto; }
+.带 { display: none; align-items: center; gap: var(--s2); margin-bottom: var(--s2); font-size: 12px; color: var(--ink-2); }
+.带.显 { display: flex; }
+.带 .号 { font: 500 12px var(--mono); color: var(--gate); }
+.带 button { margin-left: var(--s2); background: none; border: 0; color: var(--ink-3); cursor: pointer; font: inherit; }
+.带 button:hover { color: var(--ink); }
+
+.说框 {
+  width: 100%;
+  min-height: 44px; max-height: 180px;
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--line); border-radius: 6px;
+  background: var(--ground); color: var(--ink);
+  font: 400 14px/1.5 var(--sans);
+  resize: none; outline: none;
+  transition: border-color 120ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.说框::placeholder { color: var(--ink-3); }
+.说框:focus { border-color: var(--gate); }
+.说注 { margin-top: var(--s2); font: 400 11px var(--mono); color: var(--ink-3); }
+
+/* ── 右栏：产线脉搏 ── */
+.脉栏 { border-left: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+.计格 { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line-soft); border-bottom: 1px solid var(--line); }
+.计 { background: var(--panel); padding: var(--s3) var(--s4); }
+.计 .标 { font-size: 11px; color: var(--ink-3); }
+.计 .值 { font: 500 20px/1.2 var(--mono); color: var(--ink); margin-top: 2px; }
+.计 .值.零 { color: var(--ink-3); }
+.计 .值.活 { color: var(--live); }
+
+.跑列 { padding: var(--s3) var(--s4); border-bottom: 1px solid var(--line); }
+.跑 { display: flex; align-items: baseline; gap: var(--s2); padding: var(--s1) 0; font-size: 12px; }
+.跑 .号 { font: 500 12px var(--mono); color: var(--ink); }
+.跑 .环 { color: var(--ink-3); }
+.跑 .久 { margin-left: auto; font: 400 11px var(--mono); color: var(--ink-3); }
+
+.事列 { flex: 1; min-height: 0; overflow-y: auto; padding: var(--s2) 0; }
+.事 { display: flex; gap: var(--s2); padding: var(--s1) var(--s4); font-size: 11.5px; line-height: 1.45; }
+.事 time { font: 400 11px var(--mono); color: var(--ink-3); flex-shrink: 0; }
+/* 两行封顶而不是单行截断：单行省略号在值班屏上等于丢信息，
+   两行能装下绝大多数流水句，又不会让某一条把整栏撑开。 */
+.事 span { color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.事.重 span { color: var(--ink); }
+
+.读不到 { padding: var(--s4); color: var(--gate-deep); font-size: 12px; line-height: 1.5; }
+
+/* 滚动条：细、低对比，不参与视觉 */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--ink-3); }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* 常驻整天：任何动效都是打扰。降级到位 */
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+/* ══ 半屏塔形态（需求定案 Q4/Q8）══
+ *
+ * 半屏不是「窗口变窄」，是换一件事做：全屏工作台是**坐下来干活**，半屏塔是**余光扫一眼**。
+ * 所以它不是三栏压缩版——对话与流水整个收起，只留「谁在等我」和「产线活着没有」。
+ * 余光能读的信息量很小，多留一样都是让它变得需要专注去看，那就失去了半屏的意义。
+ *
+ * 情报塔那一半（定案里的首期 M1）还没建。建好之后它落在这个形态里，
+ * 与人闸并列——现在先把骨架和切换立住，不假装已经有了。
+ */
+.形态钮 {
+  margin-left: var(--s3);
+  padding: 3px 10px; border-radius: 4px;
+  border: 1px solid var(--line); background: var(--raised);
+  color: var(--ink-2); font: inherit; font-size: 11px; cursor: pointer;
+}
+.形态钮:hover { border-color: var(--gate); color: var(--ink); }
+
+.台.塔 { grid-template-columns: minmax(0, 1fr); }
+.台.塔 .话栏, .台.塔 .脉栏 { display: none; }   /* 对话与流水整个收起 */
+.台.塔 .闸栏 { border-right: 0; }
+.台.塔 .顶况 > span:not(#顶凭):not(#顶钟) { display: none; }  /* 顶条只留登录与时刻 */
+.台.塔 .徽 span { display: none; }
+.台.塔 .闸 .谁 { display: none; }               /* 闸名省掉：塔上只要单号+时长+题 */
+.台.塔 .闸 { padding: var(--s2) var(--s3); }
+.台.塔 .闸 .题 { font-size: 12px; }
+.台.塔 .组头 { padding: var(--s2) var(--s3); }
+/* 塔里补一格产线一行摘要——脉栏收了，但「活着没有」这一条不能丢 */
+.塔况 { display: none; }
+.台.塔 .塔况 {
+  display: flex; align-items: baseline; gap: var(--s2);
+  padding: var(--s2) var(--s3);
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+  font: 400 11px var(--mono); color: var(--ink-2);
+}
+.台.塔 .塔况 b { color: var(--ink); font-weight: 500; }
+
+/* 1080p 等窄屏：右栏先收 */
+@media (max-width: 1600px) {
+  .台 { grid-template-columns: 300px minmax(0, 1fr) 260px; }
+  .话流 { padding: var(--s4) var(--s5); }
+}
+
+/* 2K/4K 常驻屏：中栏的阅读列宽度是定的（汉字读起来 72ch 就够），多出来的横向空间
+   给两侧——闸题不再折行，流水句能整句看完。这是密度的正当用法，不是把字撑大。 */
+@media (min-width: 2200px) {
+  .台 { grid-template-columns: 400px minmax(0, 1fr) 400px; }
+}

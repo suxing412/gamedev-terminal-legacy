@@ -158,6 +158,17 @@ body.页:has(.稿容), .视图:has(.稿容) {
   font-variant-numeric: tabular-nums;
   border-bottom: 1px solid var(--line-soft);
 }
+
+/* 「这一页没给全」。**一个悄悄变小的真数，读起来和「这个仓就这么多文件」一模一样**——
+   所以裁掉了必须出现这一条，而且要长得不像正常的计数行。
+   平时它根本不存在（不占位），出现即说明这一页在瞒着你什么。 */
+.稿截 {
+  padding: 7px var(--s3);
+  font-size: 11px; line-height: 1.6;
+  color: var(--warn);
+  background: color-mix(in oklch, var(--warn) 9%, transparent);
+  border-bottom: 1px solid color-mix(in oklch, var(--warn) 26%, transparent);
+}
 .稿列 { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: var(--s4); }
 
 /* 筛完为空。**空白在值班屏上永远读作「它坏了」**，不是「没有命中」——

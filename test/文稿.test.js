@@ -288,6 +288,99 @@ test('守⑲ **真设计文档里的记号数**——说明表那几行不许算
     '把「说记号」当成了「用记号」，会把说明书本身标成待办：' + JSON.stringify(条.slice(0, 4)));
 });
 
+// ── 四点二、静默截断（2026-08-31 评审 S4/S5）────────────────────
+
+test('守㉔ **单根上限按最近改动裁，不按遍历序裁**（切掉的必须是最旧的）', () => {
+  // 首版是「走到 800 就 return」，而遍历序是 readdir 的名序。
+  // 实测 studio 走序尾部 24 条正好是全库最新的那批：
+  // 收口报告×8、拆单简报×6、digests/2026-08-{29,30,31}、班次×6。
+  // 本仓自己的 test/写闸.test.js 早就写着「最新那枚必须还在——被上限挤掉的该是最旧的」。
+  // 单独一个根：甲/乙 是全文件共用的夹具，别的判据往里写过东西，
+  // 拿它来验「留下的是不是最新三份」会被那些文件干扰。
+  const 独 = fs.mkdtempSync(path.join(os.tmpdir(), '裁-'));
+  // 名序与时间序**故意反着来**：名字越靠后的越新
+  for (let i = 0; i < 10; i++) {
+    const f = path.join(独, `a${String(i).padStart(2, '0')}.md`);
+    fs.writeFileSync(f, '# ' + i, 'utf8');
+    const t = new Date(Date.now() - (10 - i) * 3600 * 1000);
+    fs.utimesSync(f, t, t);
+  }
+  const 出 = 文稿.列举([{ 键: 'du', 名: '独', 路: 独, 写: true }], { 单根上限: 3 });
+  const 名们 = 出.map((x) => x.名).sort();
+  assert.strictEqual(出.length, 3);
+  assert.deepStrictEqual(名们, ['a07.md', 'a08.md', 'a09.md'],
+    '留下的不是最新的三份，实得 ' + 名们.join(','));
+});
+
+test('守㉔b **裁掉了要说出来**（一个悄悄变小的真数读起来就是「就这么多」）', () => {
+  const 独 = fs.mkdtempSync(path.join(os.tmpdir(), '裁2-'));
+  for (let i = 0; i < 7; i++) fs.writeFileSync(path.join(独, `b${i}.md`), 'x', 'utf8');
+  const 出 = 文稿.列举([{ 键: 'du', 名: '独仓', 路: 独, 写: true }], { 单根上限: 4 });
+  assert.strictEqual(出.length, 4);
+  assert.ok(Array.isArray(出.截断) && 出.截断.length === 1, '没有截断报告：' + JSON.stringify(出.截断));
+  const t = 出.截断[0];
+  assert.strictEqual(t.根, 'du');
+  assert.strictEqual(t.根名, '独仓');
+  assert.strictEqual(t.留, 4);
+  assert.ok(t.丢 >= 3, '丢了几份没报对：' + JSON.stringify(t));
+});
+
+test('守㉔c 没超上限时截断报告是空的（平时不许无端喊「没给全」）', () => {
+  fs.writeFileSync(path.join(甲, '就一份.md'), 'x', 'utf8');
+  const 出 = 文稿.列举([{ 键: 'jia', 名: '甲', 路: 甲, 写: true }], { 单根上限: 800 });
+  assert.deepStrictEqual(出.截断, []);
+});
+
+test('守㉔d 截断/未读 这些附带属性不可枚举（否则每条 deepEqual 判据都会莫名其妙地红）', () => {
+  const 出 = 文稿.列举([{ 键: 'jia', 名: '甲', 路: 甲, 写: true }]);
+  assert.ok(!Object.keys(出).includes('截断'));
+  assert.ok(!JSON.stringify(出).includes('截断'));
+  assert.ok(Array.isArray(出.截断), '不可枚举但要取得到');
+});
+
+test('守㉕ **正文搜索没有读预算**（预算按根表序耗尽，记忆库永远搜不到）', () => {
+  // 案发：读上限 400 按列表序消耗，而根表序把 memory 排在最后（实测第 885 位起）。
+  // 「雷火」真值 3 份全在 memory 正文，搜索返回 0。
+  // 拆掉它不是因为"代价可接受"，是因为它没省下东西：全量读 956 份 9.3MB 实测 48ms，
+  // 而同一个文件里的 记号统计 早就在对全部文件读全文了。
+  fs.mkdirSync(path.join(甲, '深'), { recursive: true });
+  for (let i = 0; i < 30; i++) fs.writeFileSync(path.join(甲, '深', `p${i}.md`), '无关内容', 'utf8');
+  // 排在最后的那一份才有关键词
+  fs.writeFileSync(path.join(乙, '压轴.md'), '这里写着雷火两个字', 'utf8');
+
+  const 表 = 文稿.列举(根表);
+  const 命 = 文稿.搜(表, '雷火', { 根路: { jia: 甲, yi: 乙, ro: 甲 } })
+    .filter((x) => x.命中 && x.命中 !== '文件名');
+  assert.ok(命.length >= 1, '排在最后那一份的正文没被搜到 —— 预算又回来了');
+  assert.match(命[0].命中, /雷火/);
+});
+
+test('守㉕b 搜索缓存按 mtime 命中，文件改了要重读', () => {
+  const f = path.join(甲, '会改的搜.md');
+  fs.writeFileSync(f, '起初没有那个词', 'utf8');
+  const 缓 = new Map();
+  const 根路 = { jia: 甲, yi: 乙, ro: 甲 };
+  let 表 = 文稿.列举(根表);
+  assert.strictEqual(文稿.搜(表, '暗号', { 根路, 缓 }).filter((x) => x.命中 && x.命中 !== '文件名').length, 0);
+
+  fs.writeFileSync(f, '现在有暗号了', 'utf8');
+  const later = new Date(Date.now() + 4000);
+  fs.utimesSync(f, later, later);
+  表 = 文稿.列举(根表);
+  const 命 = 文稿.搜(表, '暗号', { 根路, 缓 }).filter((x) => x.命中 && x.命中 !== '文件名');
+  // **不断言恰好一条**：这份夹具里 ro 根与 jia 根指向同一个目录，
+  // 同一个文件会被列两次，命中自然是两条。要验的是「重读了没有」。
+  assert.ok(命.length >= 1, '文件改了但缓存没失效 —— 搜索会一直说它不含那个词');
+  assert.match(命[0].命中, /暗号/);
+});
+
+test('守㉕c 读不动的要计数报出去，不许当成「它不匹配」', () => {
+  const 表 = 文稿.列举(根表);
+  // 故意给一个缺了根路的表：那些文件读不动
+  const 出 = 文稿.搜(表, '随便', { 根路: {} });
+  assert.ok(出.未读 > 0, '读不动的份数没报出来 —— 屏上会以为搜过了、没有');
+});
+
 // ── 四点五、记号统计 ───────────────────────────────────────────────
 
 test('守⑲b **只读文件的记号也要数**（先标了记号、后来才变只读的那些）', () => {

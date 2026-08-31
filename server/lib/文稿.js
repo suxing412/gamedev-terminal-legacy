@@ -300,12 +300,28 @@ function 拆名(相对) {
 // ── 列举 ──────────────────────────────────────────────────────────
 
 /**
- * 列举(根表, opts) → [{ 根, 根名, 相对, 名, 字节, 改于, 可写 }]
+ * 列举(根表, opts) → [{ 根, 根名, 相对, 名, 字节, 改于, 可写 }]（另带 .截断 属性）
+ *
  * 目录级剪枝；单根条数有上限，防某个仓炸掉整页。
+ *
+ * **上限按最近改动裁，不按遍历序裁，且裁掉了要说出来。**
+ * 首版是「走到 800 就 return」——遍历序是 readdir 的名序，不是 mtime 序，
+ * 于是被切掉的是**走序尾部**那一批。实测 studio 走序尾部 24 条正好是：
+ * `项管台账/收口报告-*`×8、`拆单简报-*`×6、`digests/2026-08-{29,30,31}`、`班次/*`×6
+ * ——**全库最新的那一批，排在最先被切掉的位置**。
+ * 而 列举() 返回的是纯数组、不带任何截断标记，页面会照常印一个变小的真数，
+ * 搜索走的也是这份被切过的列表：被切掉的文件连按文件名都搜不到。
+ * studio 现 565 份、净增 15~18/天，约两周后到点。
+ *
+ * 本仓自己的 test/写闸.test.js 早就写着「最新那枚必须还在——被上限挤掉的该是最旧的」。
  */
 function 列举(根表, opts = {}) {
   const 剪 = new Set((opts.剪枝 || 默认剪枝).map((x) => String(x).toLowerCase()));
   const 单根上限 = opts.单根上限 || 800;
+  // 硬顶只防病态仓库（几万份 md 的那种），它与 单根上限 是两件事：
+  // 前者保护进程，后者决定"这一页给你看多少"，而后者必须按时间裁并且报出来。
+  const 硬顶 = opts.硬顶 || 20000;
+  const 截断 = [];
   // 按**绝对路径**排除的目录。剪枝表是按目录名剪的，这里剪的是特定的那一个——
   // 文稿台自己的工作目录（草稿 / 版本环 / 锁）就落在某个根里面，
   // 不排掉的话它会**把自己的版本历史当成文档列出来**：
@@ -317,13 +333,16 @@ function 列举(根表, opts = {}) {
     if (!根 || !根.路) continue;
     let 真根;
     try { 真根 = fs.realpathSync(根.路); } catch (e) { continue; }   // 根不在就跳过，不是错
+    // 先整根收齐，再按最近改动裁。**遍历序不是时间序**——
+    // 边走边数着切，切掉的是 readdir 名序的尾巴，而那一段恰好是最新的那批。
+    const 本根 = [];
     let 计 = 0;
     const 走 = (目录) => {
-      if (计 >= 单根上限) return;
+      if (计 >= 硬顶) return;                       // 只防病态仓库（几万份），不参与正常裁剪
       let 项;
       try { 项 = fs.readdirSync(目录, { withFileTypes: true }); } catch (e) { return; }
       for (const it of 项) {
-        if (计 >= 单根上限) return;
+        if (计 >= 硬顶) return;
         const 全 = path.join(目录, it.name);
         if (it.isDirectory()) {
           if (剪.has(it.name.toLowerCase())) continue;
@@ -336,7 +355,7 @@ function 列举(根表, opts = {}) {
           try { st = fs.statSync(全); } catch (e) { continue; }
           const 相对 = 斜(path.relative(真根, 全));
           const 拆 = 拆名(相对);
-          出.push({
+          本根.push({
             根: 根.键,
             根名: 根.名 || 根.键,
             相对,
@@ -354,7 +373,19 @@ function 列举(根表, opts = {}) {
       }
     };
     走(真根);
+    if (本根.length > 单根上限) {
+      // 按最近改动倒序留前 N。**并且说出来丢了多少**——
+      // 一个悄悄变小的真数，读起来和"这个仓就这么多文件"一模一样。
+      本根.sort((a, b) => b.改于 - a.改于);
+      截断.push({ 根: 根.键, 根名: 根.名 || 根.键, 总: 本根.length, 留: 单根上限, 丢: 本根.length - 单根上限 });
+      本根.length = 单根上限;
+    }
+    for (const x of 本根) 出.push(x);
   }
+  // **不可枚举。**挂在数组上是为了不改返回形状（调用点十来处），
+  // 但它不该出现在 deepStrictEqual、JSON.stringify 或展开里——
+  // 那会让每一个「这个列表应该等于 []」的判据莫名其妙地红。
+  Object.defineProperty(出, '截断', { value: 截断, enumerable: false, configurable: true });
   return 出;
 }
 
@@ -444,29 +475,55 @@ const 有记号 = (it) => !!(it && it.记 && (it.记.改 + it.记.加 + it.记.�
  * 搜(列表, 词, opts) → 命中的条目（带 命中处）
  * 文件名先筛（便宜），正文后筛（要读盘，所以有条数上限）。
  */
+/**
+ * 搜(列表, 词, opts) → 命中数组（另带 .未读 / .读了 两个属性）
+ *
+ * **没有读预算。**首版有一条 `读上限 = 400`，按列表序消耗，而根表序把 memory 排在最后
+ * （实测它从第 885 位才开始），于是**记忆库那 71 份正文永远搜不到**。
+ * 实测「雷火」真值 3 份、全在 memory 正文里，搜索返回 0。「协议」真值 207，返回 121。
+ *
+ * 那条预算站不住的原因不是"代价可接受"，是**它根本没省下东西**：
+ * 同一个文件里的兄弟函数 记号统计 已经对全部 956 份逐份读全文、无任何上限。
+ * 实测全量读 956 份共 9.3MB / 5.3M 字符，48ms。预算省下的那点读盘，
+ * 换来的是一个会静默漏掉整个根的搜索。
+ *
+ * opts.缓：{ 路 → { 改于, 文 } } 的 Map，按 mtime 命中。传了就几乎不再读盘。
+ */
 function 搜(列表, 词, opts = {}) {
   const q = String(词 || '').trim().toLowerCase();
-  if (!q) return (列表 || []).map((x) => ({ ...x, 命中: '' }));
-  const 读上限 = opts.读上限 || 400;
+  if (!q) {
+    const 空 = (列表 || []).map((x) => ({ ...x, 命中: '' }));
+    Object.defineProperty(空, '未读', { value: 0, enumerable: false, configurable: true });
+    Object.defineProperty(空, '读了', { value: 0, enumerable: false, configurable: true });
+    return 空;
+  }
   const 根路 = opts.根路 || {};
+  const 缓 = opts.缓 instanceof Map ? opts.缓 : null;
   const 出 = [];
   let 读了 = 0;
+  let 未读 = 0;          // 读不动的（权限/被删/根没配）——**要报出去，不能装作它们不匹配**
 
   for (const it of (列表 || [])) {
-    const 名中 = (it.相对 || '').toLowerCase().includes(q);
-    if (名中) { 出.push({ ...it, 命中: '文件名' }); continue; }
-    if (q.length < 2 || 读了 >= 读上限) continue;
+    if ((it.相对 || '').toLowerCase().includes(q)) { 出.push({ ...it, 命中: '文件名' }); continue; }
+    if (q.length < 2) continue;
     const 根 = 根路[it.根];
-    if (!根) continue;
-    let 文;
-    try { 文 = fs.readFileSync(path.join(根, it.相对), 'utf8'); } catch (e) { continue; }
-    读了++;
-    const 低 = 文.toLowerCase();
-    const 位 = 低.indexOf(q);
+    if (!根) { 未读++; continue; }
+    const 键 = 根 + '|' + it.相对;
+    let 文 = null;
+    const 旧 = 缓 && 缓.get(键);
+    if (旧 && 旧.改于 === it.改于) 文 = 旧.文;
+    else {
+      try { 文 = fs.readFileSync(path.join(根, it.相对), 'utf8'); } catch (e) { 未读++; continue; }
+      读了++;
+      if (缓) 缓.set(键, { 改于: it.改于, 文 });
+    }
+    const 位 = 文.toLowerCase().indexOf(q);
     if (位 < 0) continue;
     const 前 = Math.max(0, 位 - 30);
     出.push({ ...it, 命中: 文.slice(前, 位 + q.length + 50).replace(/\s+/g, ' ').trim() });
   }
+  Object.defineProperty(出, '未读', { value: 未读, enumerable: false, configurable: true });
+  Object.defineProperty(出, '读了', { value: 读了, enumerable: false, configurable: true });
   return 出;
 }
 

@@ -310,18 +310,19 @@ app.get('/api/pulse', async (req, res) => {
 });
 
 // 事件流：journal 尾部（监制台没开这一口，直接读盘——只读，不写）
-// 事件的「种」：**只抹形状明确是计数器的那几个键**，不抹别的数字。
-// 抹全部数字的话，`额度余额=10000` 与 `额度余额=10` 会被判成同一种折成一行——
-// 用户既看不到余额跌到 10，也不知道那行显示的是哪一次的值。
-// 那直接违反 PRODUCT.md 原则五「数字必须是真的」。
-// **前端 public/app.js 里有一份同口径的**——两处必须一致，判据 事件折叠.test.js 盯着。
-const 事种 = (文) => String(文 || '')
-  .replace(/\b(seq|序号|次序|no|id)(\s*[=:]\s*)\d+/gi, '$1$2#')
-  .replace(/\s+/g, ' ')
-  .trim();
+// 事种 与 折叠 在 public/事流.js —— **四处共用同一份**（见该文件头注）：
+// 这里、public/app.js 的右栏、server/routes/监视.js、public/监视.js。
+// 服务端 require 一个 public/ 下的文件看着别扭，但比
+// 「服务端与浏览器各写一份、靠判据比对源码文本」诚实得多——
+// 那种比对会因为无关的排版差异而红，而那种判据最后一定会被人关掉。
+const 事流 = require('./public/事流.js');
 
 app.get('/api/events', (req, res) => {
-  const 月 = new Date().toISOString().slice(0, 7);
+  // **本地月，不是 UTC 月。**写侧（studio/lib/journal.js）按 d.getMonth()+1 分档；
+  // 这里原来写的是 toISOString().slice(0,7)。UTC+8 下每月 1 号本地 00:00–07:59
+  // 对应 UTC 上个月最后一天，于是去读上个月那份 log——**文件存在、读得通、不进读不到分支**，
+  // 屏上照常滚动，而这八小时的告警一条都不出现，08:00 自愈、不留痕。
+  const 月 = require('./server/lib/读数').本地月();
   const p = path.join(process.env.STUDIO_ROOT || 'D:/GitHub/AI-GameStudio/监制台', 'journal', 月 + '.log');
   try {
     const 全 = fs.readFileSync(p, 'utf8');
@@ -336,15 +337,8 @@ app.get('/api/events', (req, res) => {
       .reverse();        // 新在前
     // 行首固定 19 字符：[YYYY-MM-DD HH:MM] + 一个空格。切 20 会啃掉正文第一个字
     const 条 = 行.map((l) => ({ 时: l.slice(12, 17), 文: l.slice(19) }));
-    const 组 = [];
-    for (const e of 条) {
-      const 种 = 事种(e.文);
-      const 尾 = 组[组.length - 1];
-      if (尾 && 尾.种 === 种) { 尾.次 += 1; 尾.起时 = e.时; continue; }
-      组.push({ 种, 时: e.时, 起时: e.时, 文: e.文, 次: 1 });
-      if (组.length >= 60) break;     // 折完之后 60 组就足够填满那一栏了
-    }
-    res.json({ 事: 组.map(({ 种, ...x }) => x), 原始行数: 条.length });
+    const 组 = 事流.折叠(条, { 上限: 60 });   // 折完 60 组就足够填满那一栏
+    res.json({ 事: 事流.脱种(组), 原始行数: 条.length });
   } catch (e) {
     res.json({ 读不到: true, 因: e.code || e.message });
   }

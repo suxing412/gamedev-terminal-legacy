@@ -61,6 +61,42 @@ function 读增量(p, offset) {
   finally { if (fd !== undefined) { try { fs.closeSync(fd); } catch { /* 关不上不影响取数 */ } } }
 }
 
+// 清单里留几条。渲染侧只取前 8，多留一点是给「筛掉一些之后还有得看」留余地。
+const 样本上限 = 24;
+
+/**
+ * 补样：从文件尾巴回捞最近几条超水位的条目。
+ *
+ * 只在跨轮样本环空掉、而积压又不为零时用——那种时刻屏上会是
+ * 「N 条在等你」配一个空清单。只读尾部 256KB：这类流水是 append-only，
+ * 要的又是最新那几条，没有理由把整份读进内存。
+ */
+function 补样(p, 水位, n) {
+  try {
+    const st = fs.statSync(p);
+    const 长 = Math.min(st.size, 256 * 1024);
+    const 起 = st.size - 长;
+    const fd = fs.openSync(p, 'r');
+    let s;
+    try {
+      const buf = Buffer.allocUnsafe(长);
+      fs.readSync(fd, buf, 0, 长, 起);
+      s = buf.toString('utf8');
+    } finally { try { fs.closeSync(fd); } catch { /* 关不上不影响 */ } }
+    const 行 = s.split('\n');
+    if (起 > 0) 行.shift();        // 从中间切进来的第一行多半是半行，丢掉
+    const 出 = [];
+    for (const l of 行) {
+      const t = l.trim(); if (!t) continue;
+      try {
+        const e = JSON.parse(t);
+        if (e && String(e.t || '') > String(水位)) 出.push(e);
+      } catch { /* 坏行在主路上已计数，这里只是补样，跳过 */ }
+    }
+    return 出.slice(-n);
+  } catch { return []; }
+}
+
 // ── 源型注册表：加一种型才动这里；加一个格不动 ────────────────────
 const 源型 = {
   /** 时刻文件：整份内容就是一个 ISO 时刻。用于心跳一类。 */
@@ -130,9 +166,10 @@ const 源型 = {
     }
     const 水键 = 'water:' + p;
     const 累键 = 'tally:' + p;
+    const 样键 = 'sample:' + p;
     const 上次水位 = ctx.取offset(水键);
     const 水位变了 = String(上次水位 || '') !== String(水位 || '');
-    if (水位变了) { ctx.存offset(键, 0); ctx.存offset(累键, 0); ctx.存offset(水键, 水位); }
+    if (水位变了) { ctx.存offset(键, 0); ctx.存offset(累键, 0); ctx.存offset(水键, 水位); ctx.存offset(样键, []); }
 
     const r = 读增量(p, 水位变了 ? 0 : ctx.取offset(键));
     if (r === null) return { 读到: false, 因: '文件读不到' };
@@ -153,16 +190,33 @@ const 源型 = {
     const 截 = 条.length > 上限;
 
     // 积压跨轮累计：本轮新增里超过水位的加进去；源被重建时从头重数
+    //
+    // **样 也必须跨轮。**这是 2026-08-31 评审打的一条：`条` 是本轮增量，
+    // 而 `积压` 是跨轮累计，两者放在同一格里渲染，屏上就成了
+    // 「63 条在等你」+ 一个空 <ul>——第一轮读到 2000 条，之后每轮 0 条，
+    // 而这台机器开机自启整天不关，所以他看到的**永远是空那一版**。
+    // 数字是真的，清单是空的，两句话互相打脸。
     let 积压 = null;
+    let 样 = [];
     if (水位) {
-      const 本轮超水位 = 条.filter((e) => e && String(e.t || '') > String(水位)).length;
+      const 超 = 条.filter((e) => e && String(e.t || '') > String(水位));
       const 旧累 = r.重建 ? 0 : (Number(ctx.取offset(累键)) || 0);
-      积压 = 旧累 + 本轮超水位;
+      积压 = 旧累 + 超.length;
       ctx.存offset(累键, 积压);
+
+      const 旧样 = r.重建 ? [] : (ctx.取offset(样键) || []);
+      样 = 旧样.concat(超).slice(-样本上限);
+      // 环是空的、积压却不为零：把文件尾巴重读一遍补上。
+      // 正常情况走不到这里（进程起来第一轮 offset=0，整份读进来），
+      // 但**「正常情况走不到」不是留一个空列表的理由**——它一旦发生就是最难查的那种：
+      // 数字对、清单空、不报错。
+      if (!样.length && 积压 > 0) 样 = 补样(p, 水位, 样本上限);
+      ctx.存offset(样键, 样);
     }
     return {
       读到: true,
       条: 截 ? 条.slice(-上限) : 条,
+      样: 样,              // 跨轮保住的最近几条，给清单用
       本轮新增: 条.length,
       坏行: 坏行,
       截断: 截,
@@ -405,7 +459,22 @@ async function 取数(配置, opts = {}) {
       出.push({ 键: 格.键, 名: 格.名, 态: 态.读不到, 因: '取数异常：' + String((e && e.message) || e).slice(0, 120), 呈现: 格.呈现 || { 型: '灯' }, 数: null });
     }
   }
-  return { 版本: 配置.版本 || 1, 于: new Date(现在).toISOString(), 塔根: 塔根, 格: 出 };
+  // 于 留 ISO（那是数据该有的样子），另给一份**本地钟面**给屏幕用。
+  //
+  // 在这之前两处渲染都在对 ISO 做 `.slice(11,19)`——那切出来的是 UTC。
+  // 于是本地 23:52 的时候，页脚写着「取于 15:50:40」，比屏上别的每一个钟都早八小时。
+  // 这一行字唯一的用处是回答「这页数据有多新」，而一个错了八小时的钟
+  // 只会让人以为这页早就不刷新了——恰好和它刚刚犯过的那个毛病长得一模一样。
+  // 格式化只做一次、放在这里，两处渲染共用，省得下次只改一处。
+  const d = new Date(现在);
+  const p2 = (n) => String(n).padStart(2, '0');
+  return {
+    版本: 配置.版本 || 1,
+    于: d.toISOString(),
+    于本地: `${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`,
+    塔根: 塔根,
+    格: 出,
+  };
 }
 
 /** 读配置。坏 JSON / 缺 格 键都不许崩，返回可呈现的错（评审：配置坏了不崩）。 */

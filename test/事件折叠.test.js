@@ -1,4 +1,4 @@
-// 事件折叠.test.js — 右栏事件流的重复折叠（2026-08-31 晚 · UI 巡礼）
+// 事件折叠.test.js — 产线事件流的重复折叠（2026-08-31 晚 · UI 巡礼）
 //
 // 案源：制作人指着截图说「这种文档堆积不给我分类的情况不要出现」。
 // 同一夜实测 /api/events：**40 条事件，去重后只有一种**
@@ -9,39 +9,23 @@
 // 三问必须不用滚动、不用点击就能回答」。四十条心跳把「产线刚发生了什么」
 // 这一问的答案埋掉了：**不是没答，是答案被同一句话刷屏刷没了。**
 //
-// 折叠逻辑写在 public/app.js（浏览器脚本，无模块导出），这里把它按同一份源码
-// 抠出来跑——**不是抄一份**：抠不出来（函数被改名或删掉）判据就红，
-// 抄一份的话源码改了判据还是绿的，那就成了又一条假判据。
+// —— 这个文件本身改过一次口径，值得记下来 ——
+// 首版里这套逻辑存了两份（服务端一份、前端一份），于是判据的主要工作变成了
+// 「把两份都抠出来，证明它们口径一致」。当晚内部评审指出还有**第三、第四份**
+// （监视页的服务端渲染与前端重渲染），而且那两份从来没被治过：
+// 12 行事件去重只有 5 种，8 行是同一句互保重启对账，
+// 唯一那条急件（OAuth 自续连败）只占一行、还被重复渲染了两遍。
+//
+// 一个概念存四份，就一定会有一天只改了其中两份——同一天、同一个人、同一个晚上。
+// 所以现在只有一份：public/事流.js。判据直接 require 它，
+// 另有一条判据（守⑦）盯着「不许再冒出第二份」。
 'use strict';
 const assert = require('node:assert');
 const test = require('node:test');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const 源 = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
-
-function 抠(名) {
-  const i = 源.indexOf(`function ${名}(`);
-  assert.ok(i >= 0, `app.js 里找不到 ${名}()——折叠逻辑被改名或删掉了`);
-  // 从函数头一直取到下一个顶层 `\n}` 收尾
-  const 尾 = 源.indexOf('\n}', i);
-  assert.ok(尾 > i, `${名}() 的结尾找不到`);
-  return 源.slice(i, 尾 + 2);
-}
-
-// 从 `const 计数器键` 一直抠到 `事种` 那条语句的分号——
-// **两个都要**：事种 引用了 计数器键，只抠后者会 ReferenceError。
-// （这也是「抠而不抄」的好处：源码里多了一个依赖，判据当场就知道。）
-const 事种源 = (() => {
-  const i = 源.indexOf('const 计数器键');
-  assert.ok(i >= 0, 'app.js 里找不到 计数器键——事种 的口径被改了');
-  const j = 源.indexOf('const 事种 =', i);
-  assert.ok(j > i, 'app.js 里找不到 事种()');
-  return 源.slice(i, 源.indexOf(';', 源.indexOf('.trim()', j)) + 1);
-})();
-
-// eslint-disable-next-line no-new-func
-const 折叠 = new Function(`${事种源}\n${抠('折叠')}\nreturn 折叠;`)();
+const { 事种, 折叠, 拆事, 事条 } = require('../public/事流.js');
 
 const 事 = (时, 文) => ({ 时, 文 });
 
@@ -106,37 +90,52 @@ test('守③b 服务端已经折过的 次 要认下来，不能从 1 重新数'
   assert.strictEqual(出[0].起时, '18:00', '起时 该取更早那一段的起点');
 });
 
-test('守③c **服务端与前端的 事种 必须同口径**（两处写了两份，不能各走各的）', () => {
-  // 折叠现在分两层：服务端在 600 行窗口上先折一轮（不然故障会被心跳挤出窗口），
-  // 前端再折一轮。两边的「种」判得不一样，就会出现
-  // 「服务端认为是两种、前端认为是一种」这类错位——只在特定语料下发作，平时看不出来。
-  //
-  // **比行为，不比文本。**两处写法不同（一边是具名 const、一边内联），
-  // 比字符串会因为无关的排版差异而红，那种判据最后一定会被人关掉。
-  const 服务源 = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
-  const i = 服务源.indexOf('const 事种 = (文) =>');
-  assert.ok(i >= 0, 'server.js 里找不到 事种()——两处之一被改名或删了');
-  const 服务事种 = new Function(`${服务源.slice(i, 服务源.indexOf(';', 服务源.indexOf('.trim()', i)) + 1)}\nreturn 事种;`)();
-  const 前端事种 = new Function(`${事种源}\nreturn 事种;`)();
+test('守③c **全库只许有一份 事种/折叠**（这个错犯过一次：四份里只治了两份）', () => {
+  // 首版判据的工作是"证明两份口径一致"。评审指出还有第三第四份，而那两份从没被治过。
+  // 与其比对 N 份，不如让 N=1，再用一条判据钉住它别再长出来。
+  const 根 = path.join(__dirname, '..');
+  const 犯 = [];
+  const 走 = (d) => {
+    for (const f of fs.readdirSync(d, { withFileTypes: true })) {
+      if (f.name === 'node_modules' || f.name === '.git' || f.name === 'test') continue;
+      const p2 = path.join(d, f.name);
+      if (f.isDirectory()) { 走(p2); continue; }
+      if (!f.name.endsWith('.js')) continue;
+      if (p2.endsWith(path.join('public', '事流.js'))) continue;
+      const 文 = fs.readFileSync(p2, 'utf8');
+      文.split(/\r?\n/).forEach((l, i) => {
+        if (l.trim().startsWith('//') || l.trim().startsWith('*')) return;
+        // 又写了一份「事种」的定义，或又手搓了一遍计数器归一
+        const 又定义 = /(const|function)\s+事种\s*[=(]/.test(l);
+        const 又手搓 = /replace\([^)]*(seq|序号|次序)/.test(l);
+        if (又定义 || 又手搓) 犯.push(path.relative(根, p2) + ':' + (i + 1) + '  ' + l.trim().slice(0, 90));
+      });
+    }
+  };
+  走(根);
+  assert.deepStrictEqual(犯, [],
+    '这些地方又长出了一份事种/归一实现：\n  ' + 犯.join('\n  ')
+    + '\n（唯一那一份在 public/事流.js）');
+});
 
-  const 样本 = [
-    '值守心跳 seq=1461 应有=7 周期=5m',
-    '值守心跳 seq=1462 应有=7 周期=5m',
-    '额度余额=10000',
-    '额度余额=10',
-    'TK-207 执行完成',
-    'TK-208 执行完成',
-    '部署 job=7411 重试=2',
-    '同步失败 code=401',
-    '序号: 88 已归档',
-    '',
+test('守③d 四处用的都是那一份（少接一处，那一处就会继续刷屏）', () => {
+  const 根 = path.join(__dirname, '..');
+  const 用 = [
+    ['server.js', /require\(['"]\.\/public\/事流\.js['"]\)/],
+    [path.join('public', 'app.js'), /self\.事流/],
+    [path.join('server', 'routes', '监视.js'), /require\([^)]*事流\.js[^)]*\)/],
+    [path.join('public', '监视.js'), /self\.事流/],
   ];
-  for (const s of 样本) {
-    assert.strictEqual(服务事种(s), 前端事种(s), `两端对「${s}」判出的种不一样`);
+  for (const [f, re] of 用) {
+    const 文 = fs.readFileSync(path.join(根, f), 'utf8');
+    assert.match(文, re, `${f} 没接上共用的 事流.js`);
   }
-  // 而且这个口径要真的在做事：心跳同种、余额不同种
-  assert.strictEqual(前端事种(样本[0]), 前端事种(样本[1]), 'seq 没被归一');
-  assert.notStrictEqual(前端事种(样本[2]), 前端事种(样本[3]), '余额被归一了——真值会被折没');
+  // 监视页的两处渲染要同源：拆 → 折 → 画三步都走同一份
+  for (const f of [path.join('server', 'routes', '监视.js'), path.join('public', '监视.js')]) {
+    const 文 = fs.readFileSync(path.join(根, f), 'utf8');
+    assert.match(文, /事流\.折叠\(事流\.拆事\(/, `${f} 的事件流没有折叠`);
+    assert.match(文, /事流\.事条/, `${f} 没用共用的渲染，两处画得会不一样`);
+  }
 });
 
 test('守④ 空输入回空数组，不抛', () => {
@@ -151,12 +150,40 @@ test('守⑤ 单条不加计数（×1 是噪声）', () => {
   assert.strictEqual(出[0].次, 1, '单条的次数该是 1，渲染时据此不画 ×N');
 });
 
-test('守⑥ 渲染侧：×N 只在 次>1 时画，且空态说得清「不是读不到」', () => {
-  // 这两条在 app.js 的渲染分支里，抠函数抠不到，改用源码断言——
-  // 但断言的是**行为契约**而不是随便一段文本：
-  // ① 计数必须挂在 次 > 1 上（否则每行都挂一个 ×1）
-  // ② 空态必须与「读不到」分开（前者是好消息，后者是故障，值班屏上不能混）
-  assert.ok(/e\.次\s*>\s*1/.test(源), '×N 没有挂在 次>1 的条件上');
+test('守⑥ 渲染：×N 只在 次>1 时画（每行挂个 ×1 是纯噪声）', () => {
+  // 共用的那份渲染（事条）可以直接调，比读源码强
+  const 单 = 事条({ 时: '22:30', 起时: '22:30', 文: '只有这一条', 次: 1 });
+  assert.ok(!/×/.test(单), '单条也画了 ×N：' + 单);
+  assert.ok(!/fold/.test(单), '单条不该带折叠样式');
+
+  const 多 = 事条({ 时: '22:30', 起时: '21:00', 文: '值守心跳', 次: 17 });
+  assert.match(多, /×17/, '折起来的没画次数');
+  assert.match(多, /21:00.*22:30/, '折起来的要讲清从什么时候到什么时候');
+  assert.match(多, /fold/);
+
+  const 急 = 事条({ 时: '22:30', 起时: '22:30', 文: 'OAuth 已过期', 次: 1, 级: '急' });
+  assert.match(急, /urg/, '急件没标出来');
+});
+
+test('守⑥b 渲染要转义（事件正文来自 journal，不是可信输入）', () => {
+  const h = 事条({ 时: '00:00', 起时: '00:00', 文: '<img src=x onerror=alert(1)>', 次: 1 });
+  assert.ok(!h.includes('<img'), '正文没转义：' + h);
+  assert.match(h, /&lt;img/);
+});
+
+test('守⑥c 拆事：认得出监视页那种行格式，认不出也不许丢掉整行', () => {
+  const [a] = 拆事(['[2026-08-31 03:49] [瞭望塔] 急 值守 | 塔阵亡：连续 290 拍无在位回执']);
+  assert.strictEqual(a.时, '03:49');
+  assert.strictEqual(a.级, '急');
+  assert.match(a.文, /塔阵亡/);
+  // 格式不对的行：**原样留着**，不能因为正则没匹配上就把这一行吞掉
+  const [b] = 拆事(['这一行完全不合格式']);
+  assert.strictEqual(b.文, '这一行完全不合格式');
+  assert.strictEqual(b.级, '常');
+});
+
+test('守⑥d 右栏空态与「读不到」分得开（前者是好消息，后者是故障）', () => {
+  const 源 = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   assert.ok(/事空/.test(源) && /不是读不到/.test(源),
     '空态没说清「不是读不到，是真的没动静」——这两件事在值班屏上混不得');
   assert.ok(/读不到/.test(源), '读不到那条分支不见了');

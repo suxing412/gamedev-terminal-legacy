@@ -17,6 +17,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const 取 = require('../lib/监视取数');
+const 事流 = require('../../public/事流.js');   // 与右栏、与前端共用同一份折叠口径
 const { 壳, 头 } = require('../render/页');
 const { 转义 } = require('../render/md');
 
@@ -66,18 +67,14 @@ function 渲染体(g) {
   if (型 === '事件流') {
     if (!(g.数 && g.数.读到)) return 读不到;
     const n = Number((g.呈现 || {}).条数) || 12;
-    const 行 = (g.数.行 || []).slice(-n).reverse();
-    if (!行.length) {
+    // **先在大窗口上折，再取前 N 组。**右栏 2026-08-31 晚治的就是这个病，
+    // 这一页当时没跟着治：实测 12 行去重后只有 5 种，8 行是同一句互保重启对账，
+    // 而唯一那条急件（OAuth 自续连败）只占一行，还被重复渲染了两遍。
+    const 组 = 事流.折叠(事流.拆事(g.数.行 || []).reverse(), { 上限: n });
+    if (!组.length) {
       return `<p class="unk">滤掉例行事件后，没有真事件 —— 产线可能在空转</p>`;
     }
-    return `<ul class="wev">${行.map((l) => {
-      const m = String(l).match(/^\[([^\]]+)\]\s*\[([^\]]+)\]\s*(急|常|守望)?\s*([^|]*)\|?\s*(.*)$/);
-      const 时 = m ? m[1].slice(11, 16) : '';
-      const 级 = m ? (m[3] || '常') : '常';
-      const 文 = m ? (m[5] || m[4] || '') : String(l);
-      return `<li class="wev-i ${级 === '急' ? 'urg' : ''}"><time>${转义(时)}</time>`
-        + `<span class="txt">${转义(String(文).slice(0, 110))}</span></li>`;
-    }).join('')}</ul>`
+    return `<ul class="wev">${组.map(事流.事条).join('')}</ul>`
       + (g.数.滤掉 ? `<p class="wnote">另滤掉 ${g.数.滤掉} 条例行（心跳/存档/回灌）</p>` : '');
   }
 
@@ -87,16 +84,17 @@ function 渲染体(g) {
     if (n === null || n === undefined) return `<p class="unk">积压算不出 —— 水位读不到</p>`;
     const 出 = Number((g.呈现 || {}).出条目) || 8;
     const 水 = String(g.数.水位 || '');
-    const 新 = (g.数.条 || []).filter((e) => e && String(e.t || '') > 水).slice(-出).reverse();
+    // **样 而不是 条。**`条` 是本轮增量（第一轮 2000、之后每轮 0），
+    // 而 `积压` 是跨轮累计。两个放一起渲染，屏上就是「63 条在等你」配一个空 <ul>——
+    // 而这台机器开机自启整天不关，所以他看到的永远是空那一版。
+    // `样` 由取数层跨轮保住（见 监视取数.js 的样本环）。
+    const 新 = (g.数.样 || g.数.条 || []).filter((e) => e && String(e.t || '') > 水).slice(-出).reverse();
     const 清 = (g.呈现 || {}).可清账 ? `<button class="wbtn" data-ack="1">清账</button>` : '';
     if (!n) return `<p class="wok">都看过了 · 没有在等你的</p>` + 清;
     return `<div class="wcount"><b>${转义(String(n))}</b><span>条在等你</span></div>`
-      + `<ul class="wlist">${新.map((e) => {
-        const 急 = String(e.级别 || '') === '急';
-        return `<li class="wlist-i ${急 ? 'urg' : ''}"><time>${转义(String(e.t || '').slice(11, 16))}</time>`
-          + `<span class="k">${转义(String(e.类型 || e.规则 || '').slice(0, 10))}</span>`
-          + `<span class="txt">${转义(String(e.摘要 || e.文本 || '').slice(0, 90))}</span></li>`;
-      }).join('')}</ul>`
+      // **一个数字配一个空清单，是这一格能出的最坏的样子。**宁可说清单取不到。
+      + (新.length ? `<ul class="wlist">${新.map(事流.等条).join('')}</ul>`
+        : `<p class="unk">清单这一轮没取到 —— 数字是跨轮累计的，不是它凭空来的</p>`)
       + (g.数.坏行 ? `<p class="wbad">坏行 ${g.数.坏行} 条 —— 已计数未吞</p>` : '')
       + 清;
   }
@@ -158,14 +156,15 @@ function 挂(app, opts = {}) {
       const 主 = s.格.filter((g) => g.位 !== '带');
       body = 渲染带(带)
         + `<section class="wgrid" id="wgrid">${主.map(渲染格).join('')}</section>`
-        + `<p class="wfoot" id="wfoot">取于 ${转义(String(s.于 || '').slice(11, 19))} · 塔根 ${转义(s.塔根 || '')}</p>`;
+        + `<p class="wfoot" id="wfoot">取于 ${转义(s.于本地 || '—')} · 塔根 ${转义(s.塔根 || '')}</p>`;
     }
     res.type('html').send(壳({
       题: '监视 · 游戏开发者终端',
       头部: 头({ 当前: 'watch', 标题: '监视' }),
       样式: '/watch.css',
       body: body,
-      脚本: '<script src="/监视.js" defer></script>',
+      // 事流.js 必须排在前面：监视.js 顶层就取 self.事流
+      脚本: '<script src="/事流.js" defer></script><script src="/监视.js" defer></script>',
     }));
   });
 

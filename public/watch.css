@@ -150,7 +150,8 @@ body, .视图 {
 .wev { list-style: none; display: grid; gap: 1px; background: var(--line-soft); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .wev-i {
   display: grid;
-  grid-template-columns: 46px minmax(0, 1fr);
+  /* 四轨：时刻 / 正文 / 折叠次数 / 折叠时段。后两轨没内容时 auto 收成 0。 */
+  grid-template-columns: 46px minmax(0, 1fr) auto auto;
   gap: var(--s2);
   align-items: baseline;
   padding: var(--s2) var(--s3);
@@ -161,6 +162,24 @@ body, .视图 {
 .wev-i .src { font: 400 11px var(--mono); color: var(--ink-3); }
 .wev-i .txt { font-size: 12.5px; color: var(--ink-2); overflow-wrap: anywhere; }
 .wev-i.urg .txt { color: var(--gate); }
+
+/* 折起来的重复事件（2026-08-31 起，与主页右栏同一套渲染）。
+   这一页此前一条都不折：实测 12 行去重只有 5 种，8 行是同一句互保重启对账，
+   而唯一那条急件只占一行——**刷屏把唯一要紧的那句挤成了十二分之一**。
+   次数用等宽数字：它会跳（×19 → ×20），不等宽的话每跳一次整行都抖。 */
+.wev-n {
+  font: 500 10.5px var(--mono); font-variant-numeric: tabular-nums;
+  color: var(--ink-2); background: var(--raised);
+  border-radius: 3px; padding: 0 4px; align-self: baseline; white-space: nowrap;
+}
+.wev-s {
+  font: 400 10px var(--mono); font-variant-numeric: tabular-nums;
+  color: var(--ink-3); opacity: .8; align-self: baseline; white-space: nowrap;
+}
+/* 折起来的行整体压一档：它讲的是「这段时间没出事」，
+   不该和真正发生了什么的那几行抢同样的视觉重量。急件除外——那种重复更要紧。 */
+.wev-i.fold { opacity: .78; }
+.wev-i.fold.urg { opacity: 1; }
 
 /* 源表：逐源一行。四列定轨——名字承重可折，其余三列定宽不抖。 */
 .wsrc { list-style: none; display: grid; gap: 1px; background: var(--line-soft); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
@@ -200,6 +219,6 @@ body, .视图 {
 
 @container 视 (max-width: 900px) {
   .wrap { padding: var(--s5) var(--s4); }
-  .wev-i { grid-template-columns: 54px minmax(0, 1fr); }
+  .wev-i { grid-template-columns: 54px minmax(0, 1fr) auto auto; }
   .wev-i .src { display: none; }
 }

@@ -31,6 +31,18 @@ const 目 = {
 const 本地日 = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
+// 本地月。同一条尺，同一个理由，只是错得更隐蔽也更毒：
+//
+// journal 的写侧（Ticketflow/apps/studio/lib/journal.js:16）按 `d.getMonth()+1` 分档，
+// 而 /api/events 原本用 `toISOString().slice(0,7)` 拼档名。UTC+8 下，
+// **每月 1 号本地 00:00–07:59 对应 UTC 上个月最后一天**，于是它去读上个月那份 log——
+// 文件存在、读得通、行数正常，**根本不进「读不到」分支**。
+// 屏上是一栏照常滚动的事件和一个正在跳的刷新钟，而这八小时里的任何告警一条都不会出现；
+// 08:00 自己好了，不留痕，事后复现不了。
+// 日错一天还能从「今天怎么这么静」察觉；月错八小时，正好压在夜班上。
+const 本地月 = (d = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+
 /** 有日报的日期，降序。读不到目录回空数组——一份都没有是合法状态（新装的仓）。 */
 function 日报日期(根) {
   try {
@@ -113,4 +125,4 @@ function 邻日(降序日期, 日) {
   return { 上一日: 前, 下一日: 后 };
 }
 
-module.exports = { 是日, 本地日, 日报日期, 流日期, 日报, 流, 健康流水, 源表, 评分权重, 邻日, 目 };
+module.exports = { 是日, 本地日, 本地月, 日报日期, 流日期, 日报, 流, 健康流水, 源表, 评分权重, 邻日, 目 };

@@ -7,6 +7,7 @@
 // 两处画得不一样，人会看到页面在刷新的瞬间跳一下。
 (() => {
   'use strict';
+  const 事流 = self.事流;      // 折叠口径与服务端共用，见 public/事流.js
   // **每轮重新取，不缓存。** 这一页会被抠成片段塞进主页视图区，
   // 换片时 innerHTML 把旧节点整批丢掉——缓存下来的引用会变成游离节点，
   // 于是定时器照跑、请求照发，更新的却是没挂在文档上的 DOM：
@@ -14,7 +15,12 @@
   const 取网 = () => document.getElementById('wgrid');
   const 取带 = () => document.getElementById('wbar');
   const 取脚 = () => document.getElementById('wfoot');
-  if (!网) return;
+  // 这里原来还留着一行 `if (!网) return;`——上一版 `网` 是个 const，改成惰性取函数时
+  // 守卫行忘了跟着删。IIFE 顶上是 'use strict'，于是**模块一加载就 ReferenceError**，
+  // 这一行之后的全部注册都没发生：3 秒轮询、清账点击委托、visibilitychange、片段重挂，一个都没有。
+  // 页面照常渲染（首屏是服务端出的），钟停在服务端写下的那一刻，点清账不变灰、不发请求、不报错。
+  // **一次没跟着删的守卫，把整页变成一张会骗人的快照。**
+  // 真正的守卫在 一轮() 里（取到 null 就返回），那一处才知道此刻这一页在不在文档上。
 
   const 态类 = { 在岗: 'ok', 卡住: 'warn', 超限: 'warn', 阵亡: 'bad', 读不到: 'unk' };
   const 坏态 = (t) => t !== '在岗';
@@ -43,16 +49,12 @@
     if (型 === '事件流') {
       if (!(g.数 && g.数.读到)) return 读不到;
       const n = Number((g.呈现 || {}).条数) || 12;
-      const 行 = (g.数.行 || []).slice(-n).reverse();
-      if (!行.length) return '<p class="unk">滤掉例行事件后，没有真事件 —— 产线可能在空转</p>';
-      return '<ul class="wev">' + 行.map((l) => {
-        const m = String(l).match(/^\[([^\]]+)\]\s*\[([^\]]+)\]\s*(急|常|守望)?\s*([^|]*)\|?\s*(.*)$/);
-        const 时 = m ? m[1].slice(11, 16) : '';
-        const 级 = m ? (m[3] || '常') : '常';
-        const 文 = m ? (m[5] || m[4] || '') : String(l);
-        return '<li class="wev-i ' + (级 === '急' ? 'urg' : '') + '"><time>' + 转义(时)
-          + '</time><span class="txt">' + 转义(String(文).slice(0, 110)) + '</span></li>';
-      }).join('') + '</ul>'
+      // 拆、折、画三步都走 public/事流.js —— **与服务端首屏同一份代码**。
+      // 这一页的头注自己写着「两处画得不一样，人会看到页面在刷新的瞬间跳一下」；
+      // 那句话是对的，但靠两边各抄一份来保证，从来没保证住过。
+      const 组 = 事流.折叠(事流.拆事(g.数.行 || []).reverse(), { 上限: n });
+      if (!组.length) return '<p class="unk">滤掉例行事件后，没有真事件 —— 产线可能在空转</p>';
+      return '<ul class="wev">' + 组.map(事流.事条).join('') + '</ul>'
         + (g.数.滤掉 ? '<p class="wnote">另滤掉 ' + g.数.滤掉 + ' 条例行（心跳/存档/回灌）</p>' : '');
     }
 
@@ -62,16 +64,16 @@
       if (n === null || n === undefined) return '<p class="unk">积压算不出 —— 水位读不到</p>';
       const 出 = Number((g.呈现 || {}).出条目) || 8;
       const 水 = String(g.数.水位 || '');
-      const 新 = (g.数.条 || []).filter((e) => e && String(e.t || '') > 水).slice(-出).reverse();
+  // **样 而不是 条。**`条` 是本轮增量（第一轮 2000、之后每轮 0），
+  // 而 `积压` 是跨轮累计。两个放一起渲染，屏上就是「63 条在等你」配一个空 <ul>——
+  // 而这台机器开机自启整天不关，所以他看到的永远是空那一版。
+  // `样` 由取数层跨轮保住（见 监视取数.js 的样本环）。
+      const 新 = (g.数.样 || g.数.条 || []).filter((e) => e && String(e.t || '') > 水).slice(-出).reverse();
       const 清 = (g.呈现 || {}).可清账 ? '<button class="wbtn" data-ack="1">清账</button>' : '';
       if (!n) return '<p class="wok">都看过了 · 没有在等你的</p>' + 清;
       return '<div class="wcount"><b>' + 转义(String(n)) + '</b><span>条在等你</span></div>'
-        + '<ul class="wlist">' + 新.map((e) => {
-          const 急 = String(e.级别 || '') === '急';
-          return '<li class="wlist-i ' + (急 ? 'urg' : '') + '"><time>' + 转义(String(e.t || '').slice(11, 16))
-            + '</time><span class="k">' + 转义(String(e.类型 || e.规则 || '').slice(0, 10))
-            + '</span><span class="txt">' + 转义(String(e.摘要 || e.文本 || '').slice(0, 90)) + '</span></li>';
-        }).join('') + '</ul>'
+        + (新.length ? '<ul class="wlist">' + 新.map(事流.等条).join('') + '</ul>'
+          : '<p class="unk">清单这一轮没取到 —— 数字是跨轮累计的，不是它凭空来的</p>')
         + (g.数.坏行 ? '<p class="wbad">坏行 ' + g.数.坏行 + ' 条 —— 已计数未吞</p>' : '')
         + 清;
     }
@@ -137,7 +139,9 @@
     for (const el of [...网.querySelectorAll('.wcell')]) {
       if (!在册.has(el.dataset.k)) { el.remove(); 上轮.delete(el.dataset.k); }
     }
-    if (脚) 脚.textContent = '取于 ' + String(s.于 || '').slice(11, 19) + ' · 塔根 ' + (s.塔根 || '');
+    // 用服务端算好的本地钟面。对 ISO 切 slice(11,19) 切出来的是 UTC——
+    // 本地 23:52 会显示成 15:50，比屏上别的钟早八小时。
+    if (脚) 脚.textContent = '取于 ' + (s.于本地 || '—') + ' · 塔根 ' + (s.塔根 || '');
   }
 
   // 委托到 document：挂在 网 上的话，换一次片这个监听就跟着旧节点消失了

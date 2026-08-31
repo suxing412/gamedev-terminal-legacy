@@ -310,14 +310,41 @@ app.get('/api/pulse', async (req, res) => {
 });
 
 // 事件流：journal 尾部（监制台没开这一口，直接读盘——只读，不写）
+// 事件的「种」：**只抹形状明确是计数器的那几个键**，不抹别的数字。
+// 抹全部数字的话，`额度余额=10000` 与 `额度余额=10` 会被判成同一种折成一行——
+// 用户既看不到余额跌到 10，也不知道那行显示的是哪一次的值。
+// 那直接违反 PRODUCT.md 原则五「数字必须是真的」。
+// **前端 public/app.js 里有一份同口径的**——两处必须一致，判据 事件折叠.test.js 盯着。
+const 事种 = (文) => String(文 || '')
+  .replace(/\b(seq|序号|次序|no|id)(\s*[=:]\s*)\d+/gi, '$1$2#')
+  .replace(/\s+/g, ' ')
+  .trim();
+
 app.get('/api/events', (req, res) => {
   const 月 = new Date().toISOString().slice(0, 7);
   const p = path.join(process.env.STUDIO_ROOT || 'D:/GitHub/AI-GameStudio/监制台', 'journal', 月 + '.log');
   try {
     const 全 = fs.readFileSync(p, 'utf8');
-    const 行 = 全.split(/\r?\n/).filter((l) => /^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}\]/.test(l)).slice(-40).reverse();
+    // **在大窗口上折，再取前 N 组**——首版是 `.slice(-40)` 直接给前端。
+    // 异厂评审 2026-08-31 的击杀：08:00 出现 `同步失败 code=401`，
+    // 随后每 5 分钟一条心跳、连着 41 条——那条失败**根本不在返回的 40 条里**，
+    // 前端再怎么「只折相邻、不跨过中间的事」也救不回来，屏上只会是心跳×40。
+    // 折叠若发生在窗口之后，它保住的只是版面，保不住信息。
+    const 行 = 全.split(/\r?\n/)
+      .filter((l) => /^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}\]/.test(l))
+      .slice(-600)       // 先取一大段（600 行 ≈ 心跳满打满算两天，够任何一次故障活下来）
+      .reverse();        // 新在前
     // 行首固定 19 字符：[YYYY-MM-DD HH:MM] + 一个空格。切 20 会啃掉正文第一个字
-    res.json({ 事: 行.map((l) => ({ 时: l.slice(12, 17), 文: l.slice(19) })) });
+    const 条 = 行.map((l) => ({ 时: l.slice(12, 17), 文: l.slice(19) }));
+    const 组 = [];
+    for (const e of 条) {
+      const 种 = 事种(e.文);
+      const 尾 = 组[组.length - 1];
+      if (尾 && 尾.种 === 种) { 尾.次 += 1; 尾.起时 = e.时; continue; }
+      组.push({ 种, 时: e.时, 起时: e.时, 文: e.文, 次: 1 });
+      if (组.length >= 60) break;     // 折完之后 60 组就足够填满那一栏了
+    }
+    res.json({ 事: 组.map(({ 种, ...x }) => x), 原始行数: 条.length });
   } catch (e) {
     res.json({ 读不到: true, 因: e.code || e.message });
   }

@@ -356,6 +356,15 @@ body {
 
 .台.塔 { grid-template-columns: minmax(0, 1fr); }
 .台.塔 .话栏, .台.塔 .脉栏 { display: none; }   /* 对话与流水整个收起 */
+/* **页签也一起收。**
+   视图区就长在 .话栏 里，而 .话栏 在塔态是 display:none——
+   于是塔态下点页签：片段真的取回来了、真的塞进 DOM 了，**屏上什么也不会发生**。
+   （实测：点「文稿」之后 视图区.firstElementChild 有货，而它宽高都是 0。）
+   又一个「静止的活人」：点得动、不报错、没反应。
+   而这个形态的取向本来就是「余光扫一眼，多留一样都是让它变得需要专注去看」
+   ——要看某一页，先按形态钮回全屏，那才是这个模式的正当走法。
+   留着一个点了不动的导航，比没有导航坏。 */
+.台.塔 .去 { display: none; }
 .台.塔 .闸栏 { border-right: 0; }
 .台.塔 .顶况 > span:not(#顶凭):not(#顶钟) { display: none; }  /* 顶条只留登录与时刻 */
 .台.塔 .徽 span { display: none; }
@@ -378,6 +387,26 @@ body {
 @media (max-width: 1600px) {
   .台 { grid-template-columns: 300px minmax(0, 1fr) 260px; }
   .话流 { padding: var(--s4) var(--s5); }
+}
+
+/* ── 窄到装不下三栏时的兜底 ──────────────────────────────
+ * Electron 壳的 minWidth 是 1100，所以这一段在**真壳里到不了**；
+ * 它兜的是「用浏览器打开 127.0.0.1:4280」那条路（README 明写了这条路）。
+ * 不兜的话 420px 下顶栏会散架：七个页签竖着断成单字（实测「端/坐」「始/流」「间/存」），
+ * 而 .台 的 `300px 1fr 260px` 把中栏挤成负数。
+ * **散架的界面比降级的界面坏**：前者让人以为程序坏了。 */
+@media (max-width: 1100px) {
+  .台 { grid-template-columns: 280px minmax(0, 1fr); }
+  .脉栏 { display: none; }              /* 先收右栏——它是三问里最不紧的那一问 */
+  .塔况 { display: flex; }              /* 但「产线活着没有」要用一行摘要顶上 */
+}
+@media (max-width: 820px) {
+  .台 { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); }
+  .闸栏 { max-height: 38vh; border-right: 0; border-bottom: 1px solid var(--line); }
+  .顶 { flex-wrap: wrap; row-gap: var(--s2); }
+  .去 { order: 3; width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .去::-webkit-scrollbar { display: none; }
+  .顶况 > span:not(#顶闸):not(#顶钟) { display: none; }   /* 顶条只留最紧的两格 */
 }
 
 /* 2K/4K 常驻屏：中栏的阅读列宽度是定的（汉字读起来 72ch 就够），多出来的横向空间

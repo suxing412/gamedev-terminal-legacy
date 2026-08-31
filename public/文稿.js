@@ -200,6 +200,68 @@
       });
     }
 
+    // ── 三点五、版本历史 ──────────────────────────────────
+    //
+    // **后端存着 50 版，而在这之前前端一个入口都没有。**
+    // 「存了但看不到」跟没存的区别，只在你肯去翻磁盘时才成立——而人不会去翻磁盘。
+    // 冲突框里那句「盘上那版已经存进版本历史，可以找回」也因此是句空话：
+    // 承诺了一条路，路口却没有门。
+    const 史钮 = $('#稿史钮');
+    const 史盒 = $('#稿史');
+    if (史钮 && 史盒) {
+      const 位 = () => {
+        const 在 = document.querySelector('.稿项.在');
+        if (在) {
+          const u = new URL(在.href, location.origin);
+          return { r: u.searchParams.get('r'), p: u.searchParams.get('p') };
+        }
+        const q = new URLSearchParams(location.search);
+        return { r: q.get('r'), p: q.get('p') };
+      };
+      史钮.addEventListener('click', async () => {
+        if (!史盒.hidden) { 史盒.hidden = true; 史钮.classList.remove('开'); return; }
+        const { r, p } = 位();
+        if (!r || !p) return;
+        史盒.hidden = false; 史钮.classList.add('开');
+        史盒.innerHTML = '<div class="史载">取历史…</div>';
+        try {
+          const j = await (await fetch(`/api/doc/versions?r=${encodeURIComponent(r)}&p=${encodeURIComponent(p)}`)).json();
+          const 版 = (j.版们 || []);
+          if (!版.length) { 史盒.innerHTML = '<div class="史空">这份还没有版本历史——存过一次盘之后就有了。</div>'; return; }
+          史盒.innerHTML = '<div class="史头">历次版本 <b>' + 版.length + '</b>'
+            + '<span>每一次写入都留一版，带「谁写的」；上限 50 版</span></div>'
+            + '<div class="史条们">' + 版.map((v) => {
+              const t = new Date(v.时);
+              const 时文 = Number.isFinite(v.时) && v.时 > 0
+                ? `${t.getMonth() + 1}-${String(t.getDate()).padStart(2, '0')} ${t.toTimeString().slice(0, 5)}`
+                : '时刻不明';
+              return `<button type="button" class="史条" data-档="${encodeURIComponent(v.档)}">`
+                + `<span class="史时">${时文}</span>`
+                + `<span class="史谁">${(v.谁 || '未知').replace(/[&<>]/g, '')}</span>`
+                + (v.无索引 ? '<span class="史疑" title="这一版的元信息缺失，「谁写的」是从文件名回读的">存疑</span>' : '')
+                + '</button>';
+            }).join('') + '</div><div class="史文" id="史文" hidden></div>';
+        } catch (e) {
+          史盒.innerHTML = '<div class="史空 坏">取不到历史：' + (e && e.message ? e.message : e) + '</div>';
+        }
+      });
+      史盒.addEventListener('click', async (e) => {
+        const b = e.target.closest('.史条');
+        if (!b) return;
+        const { r, p } = 位();
+        $$('.史条', 史盒).forEach((x) => x.classList.remove('在'));
+        b.classList.add('在');
+        const 文格 = document.getElementById('史文');
+        if (!文格) return;
+        文格.hidden = false;
+        文格.textContent = '取…';
+        try {
+          const j = await (await fetch(`/api/doc/version?r=${encodeURIComponent(r)}&p=${encodeURIComponent(p)}&v=${b.getAttribute('data-档')}`)).json();
+          文格.textContent = j.行 ? j.文 : ('读不到这一版：' + (j.因 || ''));
+        } catch (err) { 文格.textContent = '读不到这一版：' + (err && err.message ? err.message : err); }
+      });
+    }
+
     // ── 四、记号栏：跳转 ──────────────────────────────────
     const 正文 = $('#稿正文');
 

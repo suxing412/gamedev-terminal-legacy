@@ -440,6 +440,41 @@ function 坐席选项(opt = {}) {
     // 无头会话没人能点批准：文件编辑自动接受，Bash 仍受上面两张表约束。
     // 不用 bypassPermissions——那是把闸整个拆掉，与「白名单」的意思正相反。
     permissionMode: 'acceptEdits',
+    // ---- 文稿台占用闸（2026-08-31 验收复核补上）----
+    //
+    // 在这之前，文锁.js 的 外部可写() **生产代码零调用点**：函数写好了、判据齐了，
+    // 而告示还在对坐席说「硬拦在 server 侧，写了也会被拒」——那是一句没兑现的话。
+    // 判据全绿，因为判据自己直接调那个函数。
+    //
+    // 接在 SDK 的 options.hooks 上而不是制作人的 settings.json 上：
+    // 只作用于终端拉起的坐席，随进程生死，不给全局配置留残留。
+    hooks: {
+      PreToolUse: [{
+        hooks: [async (入) => {
+          const 判 = 写手闸.判写(入 && 入.tool_name, 入 && 入.tool_input,
+            (p) => 文稿台.外部可写(p, 文稿根表()));
+          if (判.决 !== 'deny') return { continue: true };
+          // **拦下来还要让制作人看见有人在等**——不然坐席被挡了，而屏上没有任何痕迹，
+          // 他永远不知道该去解那把锁。请求进人闸队列（带等待时长，起点不刷新）。
+          for (const x of 判.挡住的) {
+            const i = String(x.键 || '').indexOf('/');
+            if (i > 0) {
+              try {
+                文稿台.请求解锁(x.键.slice(0, i), x.键.slice(i + 1), '总监',
+                  `坐席要改这份文件（${入.tool_name}），被文稿台的锁拦下了`);
+              } catch (e) { /* 记不下也别把拦截本身弄失败 */ }
+            }
+          }
+          return {
+            hookSpecificOutput: {
+              hookEventName: 'PreToolUse',
+              permissionDecision: 'deny',
+              permissionDecisionReason: 判.因,
+            },
+          };
+        }],
+      }],
+    },
     ...(CLI路径 ? { pathToClaudeCodeExecutable: CLI路径 } : {}),
     ...(opt.续 ? { resume: opt.续 } : {}),
   };
@@ -995,6 +1030,7 @@ function 文稿列举() {
 // 要挡住的三个写手里有两个不在这个进程内（坐席子进程、无人值守班次），
 // 内存里的锁它们看不见。
 const 文锁lib = require('./server/lib/文锁');
+const 写手闸 = require('./server/lib/写手闸');
 const 写闸lib = require('./server/lib/写闸');
 const 文稿台 = 文锁lib.开台(path.join(终端根, '文稿'));
 const 文稿令牌台 = 写闸lib.新令牌台();
@@ -1183,7 +1219,10 @@ function start(首选 = 端口) {
   });
 }
 
-module.exports = { start, app };
+// 坐席选项 也导出：文稿台占用闸挂在它的 hooks 上，而「闸有没有真的接上」
+// 是这次验收里唯一缺的那条判据——外部可写() 曾经写好了、判据齐了、**零调用点**。
+// 不导出的话这条判据就只能 grep 源码，那不算判据（H104）。
+module.exports = { start, app, 坐席选项 };
 
 // 直接 node server.js 跑时照常起（壳里走 start()，不重复挂）
 if (require.main === module) start().catch((e) => { console.error('起不来：', e.message); process.exit(1); });

@@ -358,6 +358,59 @@ test('守⑪ 解锁请求进人闸队列，并带等待时长', async () => {
   assert.ok(!(g2.债 || []).some((d) => d.落点 === '文稿台'), '解锁后请求还挂在队列上');
 });
 
+// ── 四点五、**占用闸真的接上了没有** ──────────────────────────────
+//
+// 这是这次验收里唯一缺的那条判据。外部可写() 曾经写好了、判据齐了、
+// 而生产代码**零调用点**——判据全绿是因为判据自己直接调那个函数。
+// 所以这里不验那个函数，验的是**它有没有被挂到坐席身上**。
+
+test('守⑯ 坐席的 PreToolUse 闸挂上了，且写锁着的文件会被拒', async () => {
+  复位();
+  const { 坐席选项 } = require('../server.js');
+  const 选 = 坐席选项({});
+  assert.ok(选.hooks && 选.hooks.PreToolUse && 选.hooks.PreToolUse[0]
+    && typeof 选.hooks.PreToolUse[0].hooks[0] === 'function',
+  '坐席选项 里没有 PreToolUse 闸——外部可写() 又变成零调用点了');
+  const 闸 = 选.hooks.PreToolUse[0].hooks[0];
+
+  // 没锁时放行
+  const 前 = await 闸({ tool_name: 'Edit', tool_input: { file_path: 档 } }, 'x', {});
+  assert.notStrictEqual((前.hookSpecificOutput || {}).permissionDecision, 'deny', '没锁却拦了');
+
+  // 上锁之后必须拒
+  const l = await (await 发('/api/doc/lock', { r: 'shi', p: '试稿.md' })).json();
+  assert.ok(l.行, JSON.stringify(l));
+  const 后 = await 闸({ tool_name: 'Edit', tool_input: { file_path: 档 } }, 'x', {});
+  assert.strictEqual((后.hookSpecificOutput || {}).permissionDecision, 'deny',
+    '锁着却放行了——那道「硬闸」又成了摆设');
+  assert.ok(/文稿台|正在编辑|被拦下/.test((后.hookSpecificOutput || {}).permissionDecisionReason || ''),
+    '拒绝理由没说清为什么：' + JSON.stringify(后));
+
+  // 读不许被拦
+  const 读 = await 闸({ tool_name: 'Read', tool_input: { file_path: 档 } }, 'x', {});
+  assert.notStrictEqual((读.hookSpecificOutput || {}).permissionDecision, 'deny', 'Read 被误拦了');
+
+  await 发('/api/doc/unlock', { r: 'shi', p: '试稿.md', 令牌: l.令牌 });
+});
+
+test('守⑰ 被闸拦下时**要在制作人屏上留痕**（进人闸队列，不是静默拒绝）', async () => {
+  // 坐席被挡了而屏上没有任何痕迹的话，制作人永远不知道该去解那把锁——
+  // 那等于把一次「等你一下」变成了一次「它自己不干活」。
+  复位();
+  const { 坐席选项 } = require('../server.js');
+  const 闸 = 坐席选项({}).hooks.PreToolUse[0].hooks[0];
+  const l = await (await 发('/api/doc/lock', { r: 'shi', p: '试稿.md' })).json();
+
+  await 闸({ tool_name: 'Write', tool_input: { file_path: 档 } }, 'x', {});
+
+  const g = await (await fetch(基 + '/api/gates')).json();
+  const 我的 = (g.债 || []).find((d) => d.落点 === '文稿台');
+  assert.ok(我的, '被闸拦下之后人闸队列里没有任何痕迹：' + JSON.stringify(g).slice(0, 200));
+  assert.ok(/总监/.test(我的.摘要), 我的.摘要);
+
+  await 发('/api/doc/unlock', { r: 'shi', p: '试稿.md', 令牌: l.令牌 });
+});
+
 // ── 五、写盘的三件事 ───────────────────────────────────────────────
 
 test('守⑫ 换行风格照原样还原（写错会让 547 行全变改动行）', async () => {

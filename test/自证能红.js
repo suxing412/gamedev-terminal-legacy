@@ -374,6 +374,28 @@ const 变异 = [
     找: '    try { r = 查锁(p); } catch (e) { continue; }   // 闸自己坏了不拖垮坐席',
     换: "    try { r = 查锁(p); } catch (e) { r = { 行: false, 因: '闸自己坏了' }; }" },
 
+  // ── 2026-09-01 · 文稿台筛选状态机（评审 S3/S6）──
+  { 名: '正文搜索另走一条路（记号/可写/类三个筛静默作废，而钮还亮着）',
+    档: 'public/文稿.js', 测: 'node --test test/文稿筛.test.js',
+    找: '          const 词中 = !q || 路.indexOf(q) >= 0 || (筛.正文 && 筛.正文.has(路));\n          const 中 = 类过 && 词中\n            && (!筛.记号 || a.getAttribute(\'data-记\') === \'1\')\n            && (!筛.可写 || a.getAttribute(\'data-可写\') === \'1\');',
+    换: "          const 词中 = !q || 路.indexOf(q) >= 0 || (筛.正文 && 筛.正文.has(路));\n          const 中 = 筛.正文 ? 词中 : (类过 && 词中\n            && (!筛.记号 || a.getAttribute('data-记') === '1')\n            && (!筛.可写 || a.getAttribute('data-可写') === '1'));" },
+  { 名: '筛清空后不复位展开态（实测 2.0 屏 → 30.3 屏，而界面宣称「无筛选」）',
+    档: 'public/文稿.js', 测: 'node --test test/文稿筛.test.js',
+    找: '        else 组.open = 默认开.has(组类);',
+    换: '' },
+  { 名: '默认展开态写死 zaiban（服务端改了默认，前端悄悄跟它分家）',
+    档: 'public/文稿.js', 测: 'node --test test/文稿筛.test.js',
+    找: "      $$('.稿组', 台).filter((g) => g.open).map((g) => g.getAttribute('data-类')),",
+    换: "      ['zaiban']," },
+  { 名: '改词后不清正文命中（搜「雷火xyz」还是那两条，屏上是旧结果）',
+    档: 'public/文稿.js', 测: 'node --test test/文稿筛.test.js',
+    找: "      框.addEventListener('input', () => { 筛.正文 = null; 过滤(框.value); });",
+    换: "      框.addEventListener('input', () => 过滤(框.value));" },
+  { 名: '正文搜索的总数不说（只给 60 条，读起来就是「只有这么多」）',
+    档: 'public/文稿.js', 测: 'node --test test/文稿筛.test.js',
+    找: '          if (计 && j.余 > 0) 计.textContent += `（正文命中 ${j.总} 份，这里只列前 ${j.总 - j.余} 份）`;',
+    换: '' },
+
   // ── 2026-09-01 · 两处空态（评审 S11/S12）──
   { 名: '原始流筛完一条不剩仍是一整片空白（唯一信号是右端 11px 的「0 条」）',
     档: 'public/stream.js', 测: 'node --test test/原始流筛.test.js',

@@ -36,7 +36,10 @@
     // 三条互相叠加：词 / 只看有记号 / 只看可写 / 只看某几类。
     // **叠加而不是互斥**——「在办文稿里有记号的」是最常问的那一句，
     // 而它需要两条同时成立。
-    const 筛 = { 词: '', 记号: false, 可写: false, 类: new Set() };
+    // 正文：回车搜正文得到的命中路径集（null = 没搜过正文）。
+    // **它是筛的一个字段，不是另一条渲染路径**——那正是 S3 那个洞：
+    // 正文搜索另走一条 只留()，把记号/可写/类三个筛静默作废，而钮还亮着。
+    const 筛 = { 词: '', 记号: false, 可写: false, 类: new Set(), 正文: null };
 
     function 应用筛() {
       const q = 筛.词;
@@ -46,24 +49,32 @@
         const 类过 = !筛.类.size || 筛.类.has(组类);
         let 组见 = 0;
         $$('.稿项', 组).forEach((a) => {
-          const 中 = 类过
-            && (!q || (a.getAttribute('data-路') || '').indexOf(q) >= 0)
+          const 路 = (a.getAttribute('data-路') || '');
+          // 正文命中并进同一条链路。**它此前是另走一条路的**（只留()），
+          // 那条路完全不读 筛.记号/筛.可写/筛.类，于是回车搜一次正文，
+          // 两颗亮着的筛选钮就静默作废了，而计数条还写着「94 份含『协议』」——
+          // 摆在两颗亮钮下面，读作「有记号 ∧ 方案与评审 ∧ 协议 = 94」。
+          // 数字是真的，口径是假的。
+          const 词中 = !q || 路.indexOf(q) >= 0 || (筛.正文 && 筛.正文.has(路));
+          const 中 = 类过 && 词中
             && (!筛.记号 || a.getAttribute('data-记') === '1')
             && (!筛.可写 || a.getAttribute('data-可写') === '1');
           a.hidden = !中;
           if (中) { 见++; 组见++; }
         });
         组.classList.toggle('空', 组见 === 0);
-        // 有筛选时摊开命中的组；筛选全清了就回到默认（只开在办）
+        // 有筛选时摊开命中的组；**筛选全清了要回到默认展开态**——
+        // 首版这里没有 else 支，于是一开一关之后每个组都还开着（实测 2.0 屏 → 30.3 屏），
+        // 而界面此刻宣称「无筛选」、清筛选钮也正好被藏了起来：
+        // **恢复的出口恰在最需要它的那一刻消失。**
         if (q || 筛.记号 || 筛.可写 || 筛.类.size) 组.open = 组见 > 0;
+        else 组.open = 默认开.has(组类);
       });
       const 清 = document.getElementById('筛清');
       const 有筛 = !!(q || 筛.记号 || 筛.可写 || 筛.类.size);
       if (清) 清.hidden = !有筛;
       if (计) {
-        计.textContent = 有筛
-          ? `${见} 份命中${说筛()}`
-          : 原计文;
+        计.textContent = 有筛 ? `${见} 份命中${说筛()}` : 原计文;
       }
       // **筛完为空要有话说。**只把组藏起来的话，屏上是一片空白——
       // 而空白在值班屏上永远读作「它坏了」，不是「没有命中」。
@@ -90,7 +101,7 @@
 
     function 说筛() {
       const 条 = [];
-      if (筛.词) 条.push(`「${筛.词}」`);
+      if (筛.词) 条.push(筛.正文 ? `「${筛.词}」(含正文)` : `「${筛.词}」`);
       if (筛.记号) 条.push('有记号');
       if (筛.可写) 条.push('可写');
       if (筛.类.size) 条.push(`${筛.类.size} 类`);
@@ -124,14 +135,20 @@
       });
     }
 
+    // 服务端渲染时哪几组是开的，就是默认展开态。**不写死 'zaiban'**：
+    // 那样服务端一改默认，这里就悄悄跟它分了家。
+    const 默认开 = new Set(
+      $$('.稿组', 台).filter((g) => g.open).map((g) => g.getAttribute('data-类')),
+    );
+
     function 清筛() {
-      筛.词 = ''; 筛.记号 = false; 筛.可写 = false; 筛.类.clear();
+      筛.词 = ''; 筛.记号 = false; 筛.可写 = false; 筛.类.clear(); 筛.正文 = null;
       if (框) 框.value = '';
       $$('.筛钮, .类筛钮', 台).forEach((b) => b.classList.remove('开'));
       $$('.稿项', 台).forEach((a) => { a.hidden = false; });
       $$('.稿组', 台).forEach((g) => {
         g.classList.remove('空');
-        g.open = g.getAttribute('data-类') === 'zaiban';   // 回默认：只开在办
+        g.open = 默认开.has(g.getAttribute('data-类'));   // 与 应用筛 用同一份默认
       });
       if (计) 计.textContent = 原计文;
       const c = document.getElementById('筛清'); if (c) c.hidden = true;
@@ -146,24 +163,10 @@
       });
     }
 
-    function 只留(集, q) {
-      let 见 = 0;
-      $$('.稿组', 台).forEach((组) => {
-        let 组见 = 0;
-        $$('.稿项', 组).forEach((a) => {
-          const 路 = a.getAttribute('data-路') || '';
-          const 中 = 集.has(路) || 路.indexOf(q) >= 0;
-          a.hidden = !中;
-          if (中) { 见++; 组见++; }
-        });
-        组.classList.toggle('空', 组见 === 0);
-        组.open = 组见 > 0;
-      });
-      return 见;
-    }
-
     if (框) {
-      框.addEventListener('input', () => 过滤(框.value));
+      // 改一个字，上一次的正文命中就过期了。**不清掉的话它会继续放行那批文件**，
+      // 屏上就成了「搜『协议x』还是 94 条」——那 94 条里 93 条不含这个词。
+      框.addEventListener('input', () => { 筛.正文 = null; 过滤(框.value); });
       框.addEventListener('keydown', async (e) => {
         if (e.key !== 'Enter') return;
         e.preventDefault();
@@ -175,9 +178,15 @@
           const r = await fetch('/api/doc/search?q=' + encodeURIComponent(q));
           const j = await r.json();
           if (!j.行) { if (计) 计.textContent = j.因 || '搜不动'; return; }
-          const 集 = new Set(j.命中.map((x) => (x.根 + '/' + x.相对).toLowerCase()));
-          const 见 = 只留(集, q.toLowerCase());
-          if (计) 计.textContent = 见 ? `${见} 份含「${q}」（文件名 + 正文）` : `没有文档含「${q}」`;
+          // **写进筛，然后走同一条 应用筛()。**另走一条路正是 S3 那个洞：
+          // 那条路不读记号/可写/类三个筛，把它们静默作废，而钮还亮着。
+          筛.正文 = new Set(j.命中.map((x) => (x.根 + '/' + x.相对).toLowerCase()));
+          筛.词 = q.toLowerCase();
+          const 见 = 应用筛();
+          // 服务端只回前 60 条，但它同时告诉我们总共几条 —— **不说的话，
+          // 「只有这么多」和「只给你看这么多」在屏上是同一句话**。
+          if (计 && j.余 > 0) 计.textContent += `（正文命中 ${j.总} 份，这里只列前 ${j.总 - j.余} 份）`;
+          if (!见 && 计) 计.textContent = `没有文档含「${q}」${说筛().replace(/^：[^·]*/, '')}`;
         } catch (err) {
           if (计) 计.textContent = '搜不动：' + (err && err.message ? err.message : err);
         }

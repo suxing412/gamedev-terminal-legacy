@@ -239,6 +239,42 @@ test('守⑫b 按绝对路径排掉的目录不列（文稿台不许把自己的
   assert.ok(排.includes('文稿别人的.md'), '误伤了同名前缀的正常文件');
 });
 
+test('守⑫c exe 态下换了终端根，工作目录照样排得掉', () => {
+  // **0.9.0 换装当场破功的那条。**守⑫ 只验了「给对路径就能排掉」，
+  // 而线上错的不是排除逻辑，是**传进去的那个路径**：
+  // 终端根在源码态＝仓根、在 portable exe 态＝部署区，两边各留过一份工作目录。
+  // 排除表只填当前那一个，于是 exe 排的是 `<部署区>/文稿`（还不存在的目录，等于没排），
+  // 而仓里那份源码态遗留的 `文稿/草/` 被当成文档列进文件库，
+  // 记号栏还把里头的草稿数成「3 份有记号」——制作人看到的那个数字三份全是假的。
+  const 部署区 = path.join(台, '部署区');
+  fs.mkdirSync(部署区, { recursive: true });
+  // 仓里那份源码态遗留的工作目录（草稿里带记号，这样它一旦漏网就会被数进记号栏）
+  const 仓内工作目录 = path.join(甲, '文稿');
+  fs.mkdirSync(path.join(仓内工作目录, '草'), { recursive: true });
+  fs.writeFileSync(path.join(仓内工作目录, '草', 'zaoji.draft.md'), '正文 【改】\n', 'utf8');
+  const 表 = [{ 键: 'terminal', 名: '终端仓', 路: 甲, 写: true }];
+
+  // 前提：**旧写法真的会漏**——不这么验，这条判据就只是在复述实现
+  const 旧 = 文稿.列举(表, { 排除目录: [path.join(部署区, '文稿')] }).map((x) => x.相对);
+  assert.ok(旧.some((p) => /zaoji\.draft/.test(p)),
+    '前提不成立：旧写法本该漏出草稿，漏不出来说明这条判据验不到东西');
+
+  const 目们 = 文稿.工作目录们(部署区, 表);
+  const 归 = 目们.map((p) => 文稿.归一(p));
+  assert.ok(归.includes(文稿.归一(path.join(部署区, '文稿'))), '漏了当前终端根下的工作目录');
+  assert.ok(归.includes(文稿.归一(仓内工作目录)), '漏了 terminal 根下的工作目录（源码态的历史落点）');
+
+  const 新 = 文稿.列举(表, { 排除目录: 目们 }).map((x) => x.相对);
+  assert.ok(!新.some((p) => /zaoji\.draft/.test(p)), '草稿还在文件库里：' + 新.filter((p) => /草/.test(p)));
+  // 源码态（终端根＝仓根）也要照样成立，别为了修 exe 把源码态弄坏
+  const 源 = 文稿.列举(表, { 排除目录: 文稿.工作目录们(甲, 表) }).map((x) => x.相对);
+  assert.ok(!源.some((p) => /zaoji\.draft/.test(p)), '源码态漏了草稿');
+  // 两处指同一个目录时不该出现重复项
+  assert.strictEqual(文稿.工作目录们(甲, 表).length, 1, '同一个目录没去重');
+
+  fs.rmSync(仓内工作目录, { recursive: true, force: true });
+});
+
 test('守⑬ 只列 .md', () => {
   assert.ok(文稿.列举(根表).every((x) => /\.md$/i.test(x.名)));
 });

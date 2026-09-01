@@ -209,6 +209,62 @@
       });
     }
 
+    // ── 三点二、用途覆写 ──────────────────────────────────
+    //
+    // 分类是按文件名猜的（实测 68/73）。**猜不中的那几份此前没有任何办法纠正**——
+    // 制作人 2026-09-01 拍板要能手工覆写。
+    //
+    // 覆写写进文档头的 frontmatter（`用途: 规章`），不写进某处数据库：
+    // 这样它跟着文档走，换台机器、拷给别人、用别的编辑器打开，那一行都还在。
+    // 但**他不会去记 frontmatter 的语法**，所以这里给一颗钮。
+    const 类钮 = $('#稿类');
+    if (类钮 && !类钮.disabled) {
+      类钮.addEventListener('click', async () => {
+        const 位 = (() => {
+          const 在 = document.querySelector('.稿项.在');
+          if (在) { const u = new URL(在.href, location.origin); return { r: u.searchParams.get('r'), p: u.searchParams.get('p') }; }
+          const q = new URLSearchParams(location.search);
+          return { r: q.get('r'), p: q.get('p') };
+        })();
+        if (!位.r || !位.p) return;
+
+        // 选项从**页面上真实存在的那几组**取，不在前端另写一份类别表——
+        // 服务端加一类而前端不知道，是「两份名单必然分叉」那一族。
+        const 类们 = [...document.querySelectorAll('.稿组[data-类]')]
+          .map((g) => ({ 键: g.getAttribute('data-类'), 名: (g.querySelector('.组名') || g.querySelector('summary') || {}).textContent || '' }))
+          .filter((x) => x.键 && x.键 !== 'qita');
+        if (!类们.length) { 告('读不到类别表——左边的文件库还没装好。'); return; }
+
+        const 今 = 类钮.getAttribute('data-类');
+        const 定 = 类钮.getAttribute('data-定') === '1';
+        const 钮们 = 类们
+          .filter((x) => x.键 !== 今)
+          .map((x) => ({ 名: (x.名 || x.键).replace(/\s*\d+\s*$/, '').trim(), 值: x.键 }));
+        // 「跟着猜」只在他已经定过的时候给——没定过的时候它就是当前状态，摆出来是噪声
+        if (定) 钮们.push({ 名: '跟着猜', 值: '' });
+        钮们.push({ 名: '算了', 值: null, 退: true });
+
+        const 选 = await 幕('这份文档是什么用途',
+          定 ? `现在是「${类钮.textContent.trim()}」，是你定的。\n改一个，或者交还给规则去猜。`
+            : `现在是「${类钮.textContent.trim()}」，是按文件名猜的。\n猜得不对就改一个——会写进文档头的「用途」那一行。`,
+          钮们);
+        if (选 === null || 选 === undefined) return;
+
+        try {
+          // 路径是 ASCII 的。写中文路径会 404 —— 浏览器把它百分号编码，
+          // 而 Express 拿未解码的 req.path 匹配路由表，永远对不上（见服务端那段注释）。
+          const r = await 发('/api/doc/purpose', { r: 位.r, p: 位.p, 用途: 选 });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok || !j.行) { 告(j.因 || `改不动（HTTP ${r.status}）`); return; }
+          // 重取片段：类别变了，左边的分组、右边的钮、组的展开态都要跟着动。
+          // **不自己改 DOM**——那会和服务端的判断分家，而分家的那一刻没人看得出来。
+          location.assign(`/doc?r=${encodeURIComponent(位.r)}&p=${encodeURIComponent(位.p)}`);
+        } catch (e) {
+          告('改不动：' + (e && e.message ? e.message : e));
+        }
+      });
+    }
+
     // ── 三点五、版本历史 ──────────────────────────────────
     //
     // **后端存着 50 版，而在这之前前端一个入口都没有。**

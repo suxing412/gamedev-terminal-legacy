@@ -333,3 +333,54 @@ test('版本口 · 版本号不许写死在代码里（写死的数迟早和真�
   assert.match(段, /require\('\.\/package\.json'\)\.version/, '版本号不是从 package.json 读的');
   assert.ok(!/['"]\d+\.\d+\.\d+['"]/.test(段), '段里出现了写死的版本号：' + 段.slice(0, 200));
 });
+
+test('守路① **路由路径一律 ASCII**（中文路径永远匹配不上，且表现是「点了没反应」）', () => {
+  // 案发 2026-09-01：我给用途覆写写了一条 `r.post('/api/doc/用途', …)`。
+  // 浏览器发出去的是 `%E7%94%A8%E9%80%94`，而 Express 拿**未解码的** req.path
+  // 去匹配路由表——那个中文字面量永远对不上，**404**。
+  // 而它在屏上的表现是「点了没反应」：控制台里一条 404，页面什么都不说。
+  //
+  // 这跟本仓记着的「中文指令不能走 argv」是同一族：
+  // **中文每过一道边界（shell / argv / URL / 文件名），都要问一句它会不会被改写。**
+  // 全项目 31 条路由本来都是 ASCII，破例的只有那一条。
+  const 根 = path.join(__dirname, '..');
+  const 查 = [path.join(根, 'server.js')];
+  const 走 = (d) => {
+    for (const f of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, f.name);
+      if (f.isDirectory()) 走(p); else if (f.name.endsWith('.js')) 查.push(p);
+    }
+  };
+  走(path.join(根, 'server'));
+  const 犯 = [];
+  for (const p of 查) {
+    const 文 = fs.readFileSync(p, 'utf8');
+    文.split(/\r?\n/).forEach((l, i) => {
+      if (l.trim().startsWith('//') || l.trim().startsWith('*')) return;
+      const m = /\b(?:r|app|router)\.(?:get|post|put|delete|all|use)\(\s*'([^']*)'/.exec(l);
+      // eslint-disable-next-line no-control-regex
+      if (m && /[^\x00-\x7F]/.test(m[1])) {
+        犯.push(`${path.relative(根, p)}:${i + 1}  ${m[1]}`);
+      }
+    });
+  }
+  assert.deepStrictEqual(犯, [],
+    '这些路由路径里有非 ASCII 字符，浏览器会把它们百分号编码，而 Express 拿未解码的\n'
+    + 'req.path 匹配——**永远 404，且屏上只表现为「点了没反应」**：\n  ' + 犯.join('\n  '));
+});
+
+test('守路①b 前端调的路径与服务端注册的对得上（改了一头没改另一头也是 404）', () => {
+  const 根 = path.join(__dirname, '..');
+  const 服 = fs.readFileSync(path.join(根, 'server', 'routes', '文稿页.js'), 'utf8');
+  const 前 = fs.readFileSync(path.join(根, 'public', '文稿.js'), 'utf8');
+  // 服务端注册的 /api/doc/* 全集
+  const 注 = new Set([...服.matchAll(/\br\.(?:get|post)\(\s*'(\/api\/doc\/[^']*)'/g)].map((m) => m[1]));
+  assert.ok(注.size >= 8, '只找到 ' + 注.size + ' 条 /api/doc 路由，这条判据可能在验空气');
+  // 前端调的（含模板串里带查询参数的，只取路径那一截）。
+  // **路径段要连非 ASCII 一起收**：第一版写的是 `[a-zA-Z-]+`，
+  // 于是前端那条 `/api/doc/用途` 根本没被这条判据看见——
+  // 而它正是这条判据要抓的东西。**一条只认合格写法的判据，抓不到不合格的写法。**
+  const 调 = new Set([...前.matchAll(/['"`](\/api\/doc\/[^'"`?\s)]+)/g)].map((m) => m[1]));
+  const 缺 = [...调].filter((x) => !注.has(x));
+  assert.deepStrictEqual(缺, [], '前端在调这些服务端没注册的路径（404，且屏上不说话）：\n  ' + 缺.join('\n  '));
+});

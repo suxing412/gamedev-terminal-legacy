@@ -163,6 +163,31 @@ body.页:has(.稿容), .视图:has(.稿容) {
   border-bottom: 1px solid var(--line-soft);
 }
 
+/* 类别钮（阅读态头上，紧跟路径）。
+   **「你定的」要和「我猜的」看得出区别**——否则下次分类不对，
+   他分不清是规则错了还是自己写错了。定过的换成强调色描边。
+   平时它只是一枚说明性的标签，所以做得比「编辑」「历史」轻一档。 */
+.稿类 {
+  margin-left: var(--s2);
+  padding: 1px 7px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 10.5px;
+  line-height: 1.6;
+  cursor: pointer;
+  white-space: nowrap;
+  vertical-align: 1px;
+  transition: color 140ms cubic-bezier(0.16, 1, 0.3, 1), border-color 140ms;
+}
+.稿类:hover:not(:disabled) { color: var(--ink); border-color: var(--ink-3); }
+.稿类:focus-visible { outline: 2px solid var(--gate); outline-offset: 1px; }
+.稿类:disabled { cursor: default; opacity: .5; }
+.稿类.定 { color: var(--gate); border-color: var(--gate); }
+.稿类.定::before { content: "·"; margin-right: 3px; }
+
 .稿计 {
   padding: 6px var(--s3);
   font-size: 11px;

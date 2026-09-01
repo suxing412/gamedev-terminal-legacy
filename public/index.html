@@ -12,6 +12,10 @@
      顺序反了，主页的字体与底色会被阅读页的规则接管——那不是能靠改颜色补的错，是层叠顺序错。 -->
 <link rel="stylesheet" href="prose.css">
 <link rel="stylesheet" href="read.css">
+<!-- 人闸.css 是 2026-09-02 批二漏掉的：片段模式只把 <script src> 抠出来挂成 data-脚本，
+     **<link> 是被丢掉的**，所以视图的样式表必须在这里预载。漏了不报错、不白屏，
+     只是那一页在壳里长得跟没写样式一样——而独立打开它又是好的，最难对上号的一种。 -->
+<link rel="stylesheet" href="人闸.css">
 <link rel="stylesheet" href="watch.css">
 <link rel="stylesheet" href="班次.css">
 <link rel="stylesheet" href="存照.css">
@@ -97,18 +101,20 @@
   <div class="凭幅 陈幅" id="陈幅" hidden><span id="陈文"></span></div>
   </div>
 
-  <aside class="闸栏">
-    <div class="栏头">
-      <h2>等你拍板</h2>
-      <span class="数" id="闸数">—</span>
-    </div>
-    <div class="闸列" id="闸列">
-      <div class="空态">读取中…</div>
-    </div>
-    <!-- 塔形态专用：脉栏收起后，「产线活着没有」这一条不能跟着丢 -->
-    <div class="塔况" id="塔况">—</div>
-  </aside>
+  <!--
+    左右两栏（等你拍板 / 产线脉搏）已拆走（2026-09-02，制作人拍板）。
 
+    去处：闸栏 → /gate 独立页；脉栏 → /watch 的产线段。
+    三问（活着 / 在跑什么 / 谁等我）由顶条那三格接住，判据 J1/J3 逐档在量。
+
+    **拆的理由不是腾地方。** 那条 340px 的栏里摊着 61 个按钮，而同一闸位的 24 单
+    动作键完全相同——摊成 24 条是把一次批量处置误报成 24 个待决定；
+    修法是给这一组一个「一次处置 24 单」的钮，而那个钮在 340px 里排不下。
+    脉栏那边同理：它与监视页的 wev **本来就在渲染同一批事件**，同一个 事流.事条()
+    在两处各画一份、各自定时刷新。
+
+    塔况 也随之删除：它的内容（在途/在跑/待派）已被顶条产线格完整吸收。
+  -->
   <main class="话栏">
     <!-- 在座条（2026-08-29 制作人拍板：主页面就是群聊，私聊是从群里分出去的支路）。
          八席常驻可见；点名字开 1:1，群仍在左边看得见，头上有「回群」。 -->
@@ -140,13 +146,6 @@
       </div>
     </div>
   </main>
-
-  <aside class="脉栏">
-    <div class="栏头"><h2>产线脉搏</h2><span class="数" id="脉时">—</span></div>
-    <div class="计格" id="计格"></div>
-    <div class="跑列" id="跑列"></div>
-    <div class="事列" id="事列"></div>
-  </aside>
 
 </div>
 <!-- 闸分组 必须在 app.js 之前：app.js 在顶层就解构 self.闸分组 -->

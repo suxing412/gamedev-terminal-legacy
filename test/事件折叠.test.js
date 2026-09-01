@@ -149,14 +149,26 @@ test('守③c **全库只许有一份 事种/折叠**（这个错犯过一次：
     + '\n（唯一那一份在 public/事流.js）');
 });
 
-test('守③d 四处用的都是那一份（少接一处，那一处就会继续刷屏）', () => {
+test('守③d 三处用的都是那一份（少接一处，那一处就会继续刷屏）', () => {
+  // 原来是**四处**：server.js / app.js / routes/监视.js / public/监视.js。
+  // 2026-09-02 拆栏之后 app.js 那一处删掉了——主壳的事件流并进了监视页，
+  // 而它们本来就在渲染同一批事件（同一个 事流.事条() 在两处各画一份）。
+  // 所以这里从四处改成三处，**并反过来断言 app.js 不许再长出一份**：
+  // 少一处接入是「那一处继续刷屏」，多长一份是「一个概念又存了两份」，两头都要挡。
   const 根 = path.join(__dirname, '..');
   const 用 = [
     ['server.js', /require\(['"]\.\/public\/事流\.js['"]\)/],
-    [path.join('public', 'app.js'), /self\.事流/],
     [path.join('server', 'routes', '监视.js'), /require\([^)]*事流\.js[^)]*\)/],
     [path.join('public', '监视.js'), /self\.事流/],
   ];
+  // **先剥注释再断言。** 这条盯的是「用没用」，不是「提没提」——
+  // 首版直接在全文上匹配，结果被 app.js 里一句解释迁移原委的注释绊倒了
+  // （那句注释本身写着「同一个 事流.事条() 在两处各画一份」）。
+  // 源码文本判据的通病：它分不出代码与说明，而说明恰恰最爱引用被删掉的那个名字。
+  const 剥注 = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+  const app = 剥注(fs.readFileSync(path.join(根, 'public', 'app.js'), 'utf8'));
+  assert.ok(!/self\.事流|事流\.事条|折叠\(/.test(app),
+    'app.js 又长出了一份事件流渲染 —— 它已经并进监视页了，两份必然有一天只改其中一份');
   for (const [f, re] of 用) {
     const 文 = fs.readFileSync(path.join(根, f), 'utf8');
     assert.match(文, re, `${f} 没接上共用的 事流.js`);
@@ -265,9 +277,15 @@ test('守⑥c 拆事：认得出监视页那种行格式，认不出也不许丢
   assert.strictEqual(b.级, '常');
 });
 
-test('守⑥d 右栏空态与「读不到」分得开（前者是好消息，后者是故障）', () => {
-  const 源 = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
-  assert.ok(/事空/.test(源) && /不是读不到/.test(源),
-    '空态没说清「不是读不到，是真的没动静」——这两件事在值班屏上混不得');
-  assert.ok(/读不到/.test(源), '读不到那条分支不见了');
+test('守⑥d 事件流的空态与「读不到」分得开（前者是好消息，后者是故障）', () => {
+  // 原来盯的是 app.js 右栏那份。2026-09-02 拆栏之后事件流并进监视页，
+  // **这条性质跟着搬家，不跟着消失**——它要挡的是「真的没动静」被写成
+  // 跟「读不到」一个样子，而那正是值班屏最不能混的两件事。
+  for (const f of [path.join('server', 'routes', '监视.js'), path.join('public', '监视.js')]) {
+    const 源 = fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+    assert.ok(/读不到 —— 不是零，是没读着/.test(源),
+      `${f}：「读不到」没说清它不是零`);
+    assert.ok(/没有真事件|产线可能在空转/.test(源),
+      `${f}：真的没事件时说不出话，会跟"读不到"长成一个样子`);
+  }
 });

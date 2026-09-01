@@ -265,16 +265,21 @@ async function 跑() {
   //
   // 所以在版面真拆之前，先在壳里把两栏摘掉，看顶条还刷不刷新。
   // 这条红了就说明拆栏那天会当场踩雷——而那天再发现，代价是一个晚上。
+  // **口径已改（2026-09-02 批四）。** 写这条时两栏还在，它验的是「提前摘掉看会不会炸」；
+  // 批四把两栏真删了之后，那句 remove() 就成了空操作，断言自动成立——
+  // **一条自动成立的判据比没有判据坏**，它占着位置、报着绿、什么都不验。
+  // 所以现在验的是稳态：两栏确实不在（有人加回来就红）＋ 顶条照样刷新。
   const 摘 = await win.webContents.executeJavaScript(`(() => {
-    for (const s of ['.闸栏', '.脉栏']) { const el = document.querySelector(s); if (el) el.remove(); }
+    const 有栏 = !!document.querySelector('.闸栏') || !!document.querySelector('.脉栏');
     const 产 = document.getElementById('顶产');
     const 闸 = document.getElementById('顶闸');
     // 先擦掉，这样"还在原地"和"被重新写过"分得开
     if (产) 产.textContent = '__擦__';
     if (闸) 闸.innerHTML = '<b class="闸词">__擦__</b>';
-    return { 摘掉了: !document.querySelector('.闸栏') && !document.querySelector('.脉栏') };
+    return { 有栏 };
   })()`);
-  记('J4① 两栏真的从 DOM 里摘掉了（不然下面几条是在完整壳上测的）', 摘.摘掉了);
+  记('J4① 主壳里已经没有闸栏与脉栏（它们各自成页；加回来这条就红）', !摘.有栏,
+    摘.有栏 ? '还能查到 .闸栏 或 .脉栏' : '两栏都不在');
 
   // 脉搏 10s 一拍、人闸 20s 一拍：等够一轮人闸，两格都会被重写
   await 等(23000);
@@ -375,6 +380,45 @@ async function 跑() {
     记(`J6·${名} 抬头说得出在跑几个`, p.有 && /在跑|读不到/.test(p.抬头), p.有 ? p.抬头 : '');
     记(`J6·${名} 跑龄用的是 顶况.js 那把尺（不是本页另写一份）`, p.有 && p.同尺);
   }
+  await win.loadURL(`http://127.0.0.1:${port}/`);
+  await 等(400);
+
+  // ── 四·九、J7：塔态钉在「等你拍板」页，且回全屏能还原 ──────────
+  //
+  // 拆栏之前塔＝只留闸栏、藏掉对话。闸栏搬走之后，塔如果还停在对话页，
+  // 屏上就是一条 360px 宽的**空对话**——而形态记在 localStorage 里，
+  // 于是开机直接进那个空屏。这条判据要挡的正是「塔是空的」。
+  //
+  // 顺带挡另一半：回全屏要还原进塔之前那一页。塔是临时形态，
+  // 不该改变你本来在看什么——按一下 F9 再按回来，页面换了，那是一种很闷的坏。
+  await win.loadURL(`http://127.0.0.1:${port}/?v=watch`);
+  await 等(3000);
+  const 塔况 = await win.webContents.executeJavaScript(`(async () => {
+    const 台 = document.querySelector('.台');
+    const 页 = () => {
+      const a = document.querySelector('.去 a.在');
+      return a ? a.getAttribute('data-jian') : null;
+    };
+    const 进前 = 页();
+    document.getElementById('形态钮').click();
+    await new Promise((r) => setTimeout(r, 2200));
+    const 塔上 = 页();
+    const 塔里有内容 = (() => {
+      const v = document.getElementById('视图区');
+      if (!v || v.hidden) return false;
+      return v.getBoundingClientRect().height > 40 && !!v.querySelector('#闸页');
+    })();
+    document.getElementById('形态钮').click();
+    await new Promise((r) => setTimeout(r, 2200));
+    const 回来 = 页();
+    return { 进前, 塔上, 塔里有内容, 回来, 还在塔: 台.classList.contains('塔') };
+  })()`);
+  记('J7① 进塔之后停在「等你拍板」页（不是空对话）',
+    塔况.塔上 === 'gate', `进塔前 ${塔况.进前} → 塔上 ${塔况.塔上}`);
+  记('J7② 塔里那一页真的有内容（视图区有高度且装着闸页）', 塔况.塔里有内容);
+  记('J7③ 回全屏还原进塔之前那一页（塔是临时形态，不该改变你在看什么）',
+    塔况.回来 === 塔况.进前, `进塔前 ${塔况.进前} → 回来 ${塔况.回来}`);
+  记('J7④ 两次点击之后确实回到了全屏', !塔况.还在塔);
   await win.loadURL(`http://127.0.0.1:${port}/`);
   await 等(400);
 

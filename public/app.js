@@ -27,12 +27,8 @@ const 时长文 = (小时) => {
   if (h < 48) return h.toFixed(0) + ' 小时';
   return (h / 24).toFixed(1) + ' 天';
 };
-const 跑了 = (起) => {
-  const t = Date.parse(起 || '');
-  if (Number.isNaN(t)) return '';
-  const m = Math.floor((Date.now() - t) / 60000);
-  return m < 60 ? m + '′' : Math.floor(m / 60) + '° ' + (m % 60) + '′';
-};
+// 跑龄的写法（跑了）随脉栏一起搬走了：现在 public/顶况.js 的 龄文 是唯一那把尺，
+// 顶条的产线格与监视页的产线段都用它。留一份不用的在这里，就是留了第二把尺。
 
 let 闸表 = [];
 
@@ -48,14 +44,11 @@ let 闸表 = [];
 //      把它们摊成 24 个独立条目，是把**一次批量处置**误报成了 24 个待决定。
 // 所以按闸位分组（单据）、按型分组（机制），组头讲这一组的动作与形状，
 // 组可折叠且记住折叠态。数据没变，改的是它自称有多少件事。
-// 分堆与折叠规则都在 public/闸分组.js（判据要 require 它，所以它们不能长在这个文件里）
-const { 久档, 分闸组, 该收 } = self.闸分组;
+// 分堆规则在 public/闸分组.js（判据要 require 它，所以它不能长在这个文件里）。
+// **折叠态与筛选态跟着栏一起搬走了**（现在归 public/人闸.js），
+// 这里只剩顶条那一格要用的：分堆 + 久档。
+const { 久档, 分闸组 } = self.闸分组;
 const 顶况文 = self.顶况;          // 顶栏读数的写法，见 public/顶况.js
-const 闸折键 = 'gt.闸折态';
-function 读折() { try { const o = JSON.parse(localStorage.getItem(闸折键) || '{}'); return new Map(Object.entries(o)); } catch { return new Map(); } }
-function 写折(m) { try { localStorage.setItem(闸折键, JSON.stringify(Object.fromEntries(m))); } catch { /* 隐私模式写不进，不值得为它报错 */ } }
-let 折态 = 读折();
-let 闸筛 = '全';
 
 async function 拉人闸() {
   const [g, a] = await Promise.all([
@@ -74,7 +67,8 @@ async function 拉人闸() {
   // 于是**顶条永远停在 `—`，而且不报错**——「静止的活人」的教科书写法。
   // 现在顶条这一路不碰任何栏内元素，画栏那一路自己判在不在。
   写顶闸(g, 单, 阈);
-  画闸列(g, a, 单, 机, 阈);
+  // 画栏那一路已经删了（2026-09-02 拆栏）：那一栏现在是 /gate，由 public/人闸.js 画。
+  // 取数这一路留在这里，是因为顶条的人闸格与产线格都要它。
 }
 
 /** 顶条人闸格。只碰 #顶闸，与栏在不在无关。 */
@@ -113,85 +107,13 @@ function 写顶闸(g, 单, 阈) {
   元.title = r.文 + (r.章 ? ` · 最久 ${时长文(r.最久小时)}` : '');
 }
 
-/** 「等你拍板」那一栏。**栏不在就静默跳过**——它已经拆成独立页。 */
-function 画闸列(g, a, 单, 机, 阈) {
-  const 列 = $('闸列'); if (!列) return;
-  const 数元 = $('闸数');
-  if (数元) 数元.textContent = g.读不到 ? '读不到' : `${单.length} 单 · ${机.length} 机制`;
-  const 段 = [];
-
-  // 概览兼筛选。既然要在栏头说"多少件"，就让这句话同时能点——
-  // 多一行 chip 换掉一个独立筛选面板，340px 宽的栏付得起这个价。
-  if (!g.读不到 && (单.length + 机.length) > 8) {
-    const chip = (k, 名, n) => `<button class="闸筛钮${闸筛 === k ? ' 选中' : ''}" data-筛="${k}"${n ? '' : ' disabled'} aria-pressed="${闸筛 === k}">${名}<b>${n}</b></button>`;
-    段.push(`<div class="闸筛" role="group" aria-label="按类型筛选">
-      ${chip('全', '全部', 单.length + 机.length)}${chip('单', '单据', 单.length)}${chip('机', '机制', 机.length)}
-    </div>`);
-  }
-
-  // 一组的壳：组头（可折叠、报动作与形状）+ 组身。
-  // 组头两行：第一行是身份（名 + 计数），第二行是**这一组要你做什么、烂到什么程度**。
-  // 挤成一行量过——300px 宽的栏里名被截 46px、注被截 74px，
-  // 而注那句正是这次分堆新增的全部价值，截掉了等于没做。
-  const 画组 = (键, 名, 计, 注, 项们, 齐) => {
-    const 收 = 该收(折态, 键, 计, 闸筛);
-    return `<div class="闸组${齐 ? ' 齐久' : ''}">
-      <button class="组头 可折" data-组="${esc(键)}" aria-expanded="${!收}" aria-controls="组身-${esc(键)}">
-        <span class="头1">
-          <span class="折箭" aria-hidden="true">${收 ? '▸' : '▾'}</span>
-          <span class="组名">${esc(名)}</span><b>${计}</b>
-        </span>
-        <span class="组注">${注}</span>
-      </button>
-      <div class="组身" id="组身-${esc(键)}"${收 ? ' hidden' : ''}>${项们.join('')}</div>
-    </div>`;
-  };
-
-  const 画单 = (d, i) => {
-    const h = Number(d.停摆小时) || 0;
-    const 档 = 久档(h, 阈);
-    return `<button class="闸${档 ? ' 久' + 档 : ''}" data-i="${i}" title="${esc(d.闸名 + ' · ' + (d.指引 || d.按钮 || ''))}">
-      <span class="行1"><span class="号">${esc(d.id)}</span><span class="久">${时长文(h)}</span></span>
-      <span class="题">${esc(d.title || '')}</span>
-    </button>`;
-  };
-
-  if (g.读不到) {
-    段.push(`<div class="读不到">读不到监制台（${esc(g.因)}）<br>这一栏现在不可信，别拿它当"没事"。</div>`);
-  } else if (!单.length) {
-    段.push('<div class="组头 静">单据</div><div class="空态"><b>没有等你签的单</b>单据级人闸清空。</div>');
-  }
-
-  // 单据按闸位分（同闸位动作键相同 ⇒ 一次批量处置），机制按型分（型 = 这个决定要花多少脑子）。
-  // 一次调用同时分两类，下标就只有一套——两次调用各算各的偏移量，
-  // 是"带单带错一条"这类错的经典产地。
-  if (!g.读不到 && (单.length || 机.length)) {
-    for (const z of 分闸组(单, a.读不到 ? [] : 机, 阈, 闸筛)) {
-      if (z.类 === '单') {
-        const s = z.形;
-        const 注 = `${z.动 ? esc(z.动) + ' · ' : ''}${s.逾期 === s.总 ? '全部逾期' : `${s.逾期} 逾期`}，最久 ${时长文(s.最久)}`;
-        段.push(画组(z.键, z.名, z.计, 注, z.项.map((p) => 画单(p.d, p.i)), z.齐));
-      } else {
-        段.push(画组(z.键, z.名, z.计, `跨 ${z.节数} 节 · 读自议程档`, z.项.map(({ d, i }) => `<button class="闸 机" data-i="${i}" title="${esc(d.说明).slice(0, 300)}">
-          <span class="行1"><span class="号">第 ${d.号} 条</span></span>
-          <span class="题">${esc(d.题)}</span>
-          <span class="谁">${esc(d.节)}</span>
-        </button>`), false));
-      }
-    }
-  }
-
-  if (a.读不到) 段.push(`<div class="组头 静">机制</div><div class="读不到">读不到议程档（${esc(a.因)}）</div>`);
-  若变('闸', 列, 段.join(''));
-}
 
 // ---- 右栏：脉搏 ----
 async function 拉脉搏() {
   let r;
   try { r = await fetch('/api/pulse').then((x) => x.json()); } catch { r = { 读不到: true, 因: '坐席后端不通' }; }
   if (!r.读不到) 取数时.pulse = Date.now();      // 陈旧哨的打点：只在真取到时盖章
-  写顶产(r);                     // 顶条：与脉栏在不在无关
-  画脉栏(r);                     // 页面：脉栏已并进监视页，主壳里它不在
+  写顶产(r);                     // 顶条那一格。脉栏本身已并进监视页，这里不再画栏。
 }
 
 /** 顶条的脉点与产线格。只碰 #脉点 / #顶产。 */
@@ -217,86 +139,7 @@ function 写顶产(r) {
   元.className = '顶产' + (s.级 === '警' ? ' 警' : s.级 === '弱' ? ' 弱' : '');
 }
 
-/** 「产线脉搏」那一栏。**栏不在就静默跳过**——它已并进监视页。 */
-function 画脉栏(r) {
-  if (!$('计格') && !$('跑列') && !$('塔况')) return;
-  if (r.读不到) {
-    若变('计', $('计格'), '');
-    若变('跑', $('跑列'), `<div class="读不到">读不到监制台（${esc(r.因)}）</div>`);
-    return;
-  }
-  const c = r.计数 || {};
-  const 跑 = r.在跑 || [];
 
-  const 格 = [
-    ['在途', (c['在途'] || 0) + (c['初检'] || 0) + (c['核查'] || 0) + (c['仲裁'] || 0), 跑.length > 0],
-    ['待派', (c['待派'] || 0) + (c['待重派'] || 0) + (c['已排期'] || 0), false],
-    ['候验收', c['完成'] || 0, false],
-    ['已落袋', c['归档'] || 0, false],
-  ].map(([标, 值, 活]) =>
-    `<div class="计"><div class="标">${标}</div><div class="值${值 ? (活 ? ' 活' : '') : ' 零'}">${值}</div></div>`).join('');
-  若变('计', $('计格'), 格);
-
-  const 跑html = 跑.length
-    ? 跑.map((x) => `<div class="跑"><span class="号">${esc(x.单)}</span><span class="环">${esc(x.环节)}</span><span class="久">${跑了(x.起时)}</span></div>`).join('')
-    : `<div class="跑"><span class="环">无在跑会话</span></div>`;
-  const 拒 = (r.拒因 || []).length
-    ? `<div class="跑"><span class="环" style="color:var(--warn)">上轮拒因 ${r.拒因.length} 项</span></div>` : '';
-  若变('跑', $('跑列'), 跑html + 拒);
-
-  // 塔形态的一行摘要。**它的活已经被顶条产线格接走了**（2026-09-02 拆栏）：
-  // 塔况 长在 .闸栏 里，闸栏搬走它就跟着没了。留这段是给"栏还在"的过渡期用的，
-  // 顶条那一格才是现在的正主——迁移动作显式写在这里，是因为漏掉它会静默断掉两条降级路。
-  const 塔 = $('塔况');
-  if (塔) {
-    const 在途 = (c['在途'] || 0) + (c['初检'] || 0) + (c['核查'] || 0) + (c['仲裁'] || 0);
-    塔.innerHTML = `在途 <b>${在途}</b> · 在跑 <b>${跑.length}</b> · 待派 <b>${(c['待派'] || 0) + (c['已排期'] || 0)}</b>`;
-  }
-}
-
-// ---- 右栏：事件流 ----
-const 重词 = /失败|急件|滞留|上呈|三振|不过|裁决|落袋|归档|废弃/;
-
-// 事种 与 折叠 都在 public/事流.js —— **四处共用同一份**：
-// server.js 的 /api/events、这里、server/routes/监视.js、public/监视.js。
-// 2026-08-31 当晚的教训：这套逻辑原本存了四份，那天治好了两份，
-// 另外两份原封不动地继续刷屏。一个概念存四份，就一定会有一天只改了其中两份。
-const 事流 = self.事流;
-const { 事种, 折叠 } = 事流;
-
-async function 拉近事() {
-  let r;
-  try { r = await fetch('/api/events').then((x) => x.json()); } catch { return; }
-  const 列 = $('事列');
-  if (r.读不到) { 若变('事', 列, `<div class="读不到">读不到流水（${esc(r.因)}）</div>`); return; }
-
-  const 条 = 折叠(r.事 || []);
-  // 今天的只写 HH:MM，别的日子带上 MM-DD。窗口是 600 行 ≈ 58 小时，
-  // 而首版每行只有 HH:MM——实测一屏 51 组里 30 组不是当天，时刻局部递减而屏上毫无提示，
-  // 跨午夜的折叠行还会显示成「23:03→02:13」，起点看着比终点晚。规则在 事流.刻()。
-  const 今日 = r.今日 || '';
-  let 上日 = null;
-  const html = 条.length ? 条.map((e) => {
-    const 重 = 重词.test(e.文) ? ' 重' : '';
-    // 折起来的那些：一行讲清「同一件事、多少次、从什么时候到什么时候」
-    const 计 = e.次 > 1
-      ? `<b class="事计">×${e.次}</b><span class="事跨">${esc(事流.刻(e.起日, e.起时, 今日))}→${esc(事流.刻(e.日, e.时, 今日))}</span>`
-      : '';
-    // 日期一变插一条分隔——**每行都写日期太吵，一天写一次刚好**
-    let 隔 = '';
-    if (e.日 && e.日 !== 上日) {
-      if (上日 !== null) 隔 = `<div class="日隔">${esc(e.日 === 今日 ? '今天' : e.日.slice(5))}</div>`;
-      上日 = e.日;
-    }
-    return 隔 + `<div class="事${重}${e.次 > 1 ? ' 折' : ''}">`
-      + `<time>${esc(事流.刻(e.日, e.时, 今日))}</time>`
-      + `<span title="${esc(e.文)}">${esc(e.文)}</span>${计}</div>`;
-  }).join('')
-    // 空态要说清**是真的没事，不是读不到**——这两件事在值班屏上绝不能混
-    : '<div class="事空">最近没有产线事件。<span>不是读不到，是真的没动静。</span></div>';
-  若变('事', 列, html);
-  $('脉时').textContent = new Date().toTimeString().slice(0, 5);
-}
 
 // ---- 中栏：对话 ----
 let 带的单 = null;
@@ -365,13 +208,6 @@ async function 说(话) {
   拉人闸(); 拉脉搏(); // 说完可能有写动作，立刻对账
 }
 
-function 上带(i) {
-  const d = 闸表[i]; if (!d) return;
-  带的单 = d.类 === '机' ? `议程第 ${d.号} 条` : d.id;
-  $('带号').textContent = 带的单 + ' · ' + (d.类 === '机' ? d.题 : (d.title || ''));
-  $('带').classList.add('显');
-  $('说框').focus();
-}
 function 收带() { 带的单 = null; $('带').classList.remove('显'); }
 
 // ---- 接线 ----
@@ -385,24 +221,6 @@ function 收带() { 带的单 = null; $('带').classList.remove('显'); }
 // 差别就是「那一格不刷新」和「整个前端停在这一行」。
 const 绑 = (id, 事, 手) => { const el = $(id); if (el) el.addEventListener(事, 手); return !!el; };
 
-绑('闸列', 'click', (e) => {
-  const 头 = e.target.closest('.组头.可折');
-  if (头) {
-    // 当场翻，不等下一轮轮询——折叠是"我现在不想看这一堆"，
-    // 让它等两秒才收起来，就等于每次都要怀疑自己有没有点上。
-    const 键 = 头.dataset.组;
-    const 收 = 头.getAttribute('aria-expanded') === 'true';   // 翻的是屏上此刻的样子，不是默认值
-    折态.set(键, 收);
-    写折(折态);
-    头.setAttribute('aria-expanded', String(!收));
-    头.querySelector('.折箭').textContent = 收 ? '▸' : '▾';
-    const 身 = 头.parentElement.querySelector('.组身'); if (身) 身.hidden = 收;
-    return;
-  }
-  const 筛钮 = e.target.closest('.闸筛钮');
-  if (筛钮) { 闸筛 = 筛钮.dataset.筛; 拉人闸(); return; }
-  const b = e.target.closest('.闸'); if (b) 上带(Number(b.dataset.i));
-});
 $('带撤').addEventListener('click', 收带);
 
 const 框 = $('说框');
@@ -419,14 +237,10 @@ document.addEventListener('keydown', (e) => {
   if (e.target === 框) { if (e.key === 'Escape') { 框.value = ''; 框.blur(); } return; }
   if (e.key === '/') { e.preventDefault(); 框.focus(); }
   else if (e.key === 'F9') { e.preventDefault(); 换形态(!document.querySelector('.台').classList.contains('塔')); }
-  // 数字键选的是**看得见的**第 N 条，不是 闸表 的第 N 项。
-  // 分组折叠之后这两者会分家：折起来的那些还在 闸表 里，按 2 却带上一条屏幕上根本没有的单，
-  // 就成了"点了有反应、但反应的不是你指的那个"——比没反应更难查。
-  else if (e.key >= '1' && e.key <= '9') {
-    const 见 = [...$('闸列').querySelectorAll('.闸')].filter((x) => x.offsetParent !== null);
-    const 目 = 见[Number(e.key) - 1];
-    if (目) 上带(Number(目.dataset.i));
-  }
+  // 数字键 1–9「选左栏第 N 条」**随左栏一起删了**（2026-09-02 拆栏）。
+  // 那一栏现在是 /gate 独立页，而在那一页上「第 N 条」这个说法不成立：
+  // 页面一屏能装几十条，1–9 覆盖不到，留着就是一条只在前九条上生效的快捷键——
+  // **半个能用的快捷键比没有坏**：它让人以为按 5 一定选到第五条。
 });
 
 // ---- 凭据与额度 ----
@@ -494,6 +308,13 @@ function 换形态(要塔, 记 = true) {
   document.querySelector('.台').classList.toggle('塔', 要塔);
   $('形态钮').textContent = 要塔 ? '全屏' : '半屏';
   if (记) { try { localStorage.setItem(塔键, 要塔 ? '塔' : '台'); } catch { /* 无痕模式就不记 */ } }
+  // 塔态钉在「等你拍板」页，回全屏恢复上次那一页（2026-09-02 拆栏）。
+  //
+  // **不这么做塔就是空的。** 拆栏之前塔＝只留闸栏、藏掉对话；闸栏搬走之后
+  // 塔如果还停在对话页，屏上就是一条 360px 宽的空对话——而 localStorage 里的
+  // 形态是会记住的，于是开机直接进那个空屏。
+  // 由 视图.js 接这个事件（它才知道当前是哪一页、怎么换）。
+  document.dispatchEvent(new CustomEvent('形态换', { detail: { 塔: !!要塔 } }));
   // 在壳里才改窗形；浏览器里只换版式，不折腾窗口
   if (window.壳 && window.壳.半屏) window.壳.半屏(要塔);
 }
@@ -589,9 +410,10 @@ $('座组') && $('座组').addEventListener('click', (e) => {
   换私聊(私聊席 === 名 ? null : 名);      // 再点一次＝回群
 });
 
-拉人闸(); 拉脉搏(); 拉近事(); 拉凭据(); 拉额度(); 拉在座();
+// 拉近事 随事件流一起并进监视页（2026-09-02 拆栏批三）：
+// 它与监视页的 wev **本来就在渲染同一批事件**，同一个 事流.事条() 在两处各画一份。
+拉人闸(); 拉脉搏(); 拉凭据(); 拉额度(); 拉在座();
 setInterval(拉人闸, 20000);
 setInterval(拉脉搏, 10000);
-setInterval(拉近事, 15000);
 setInterval(拉凭据, 60000);
 setInterval(拉额度, 300000);

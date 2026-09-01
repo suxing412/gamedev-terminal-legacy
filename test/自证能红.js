@@ -830,10 +830,11 @@ const 变异 = [
     档: 'public/闸分组.js', 测: 'node --test test/闸分组.test.js',
     找: "    if (筛 && 筛 !== '全') return false;",
     换: '' },
-  { 名: '数字键按闸表下标取（折起来的那些也能被带上，带的不是你指的那条）',
-    档: 'public/app.js', 测: 'node --test test/闸分组.test.js',
-    找: "const 见 = [...$('闸列').querySelectorAll('.闸')].filter((x) => x.offsetParent !== null);",
-    换: '上带(Number(e.key) - 1); const 见 = [];' },
+  // 「数字键按闸表下标取」这条变异**随功能一起撤了**（2026-09-02 拆栏）：
+  // 数字键 1–9 选左栏第 N 条的功能删掉了（那一栏成了 /gate 独立页，
+  // 一屏几十条，1–9 覆盖不到，留着就是半个能用的快捷键）。靶子没了，变异无处可打。
+  // **撤一条变异必须留字据**：不然「变异数少了一条」和「有人把判据偷偷拿掉了」
+  // 在计数上长得一模一样。守⑥c 改了口径接着盯：它现在验的是「删干净了、没在别处复活」。
   { 名: 'index.html 不引 闸分组.js（左栏在 self.闸分组 上炸成空白）',
     档: 'public/index.html', 测: 'node --test test/闸分组.test.js',
     找: '<script src="闸分组.js"></script>',

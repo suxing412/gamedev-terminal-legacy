@@ -7,6 +7,9 @@ node_modules/
 .session-*.json
 # 用量流水：append-only 的运行时账，每说一句话就长一行。同上。
 用量.jsonl
+# 班次报告：跑一班落一份。**规则要写在功能落地之前**——
+# 昨夜 .session-总监.json 就是等它先被 `git add -A` 收进去才想起来的。
+班次/
 .log
 .err
 

@@ -163,6 +163,9 @@ app.get('/api/views', (req, res) => res.json({ 视图: require('./server/render/
 // 情报三页（M1c · V1/V2/V3）：/digest[/日]、/stream[/日]、/health。
 // 挂在 static 之后：坐席（public/index.html）继续占着 `/`，这三条各走各的路径，互不遮挡。
 require('./server/routes/views').挂(app, 终端根);
+// 「等你拍板」独立页（2026-09-02 拆栏 · 批二）。只出骨架，数据由 public/人闸.js 填——
+// 分堆规则在 public/闸分组.js 那一份，服务端不再实现第二遍。
+require('./server/routes/人闸页').挂(app);
 
 // ---- 取数：监制台代理 ----
 // 读不到时回 { 读不到: true, 因 }，前端据此显示「读不到」而不是 0（设计原则五）。

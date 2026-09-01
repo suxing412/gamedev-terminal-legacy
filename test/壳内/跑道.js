@@ -299,6 +299,51 @@ async function 跑() {
   await win.loadURL(`http://127.0.0.1:${port}/`);      // 摘过 DOM，后面的判据要干净的一份
   await 等(400);
 
+  // ── 四·七、J5：「等你拍板」页的批量钮真的带走了自己那一组 ──────────
+  //
+  // 这一页相对那条 340px 的栏，多出来的唯一一件真东西就是「一次处置 N 单」。
+  // **它上线当天就是个坏掉的按钮**：主壳里旧的左栏还在，而两处渲染的是
+  // 同一份 闸分组.js 分出来的同一批组，组身 id 一模一样；
+  // `getElementById` 拿到的是文档里第一个——栏里那个，折叠着、行数为 0。
+  // 于是点下去不报错、不动、说框里什么都没有。
+  //
+  // 改法是组件找自己的子元素一律相对导航（closest → querySelector），
+  // 不经过全文档 id 空间。这条判据钉的是**行为**：点完之后说框里的行数
+  // 必须等于那一组的单数，所以拆栏之后（栏没了、撞车消失）它照样有意义。
+  await win.loadURL(`http://127.0.0.1:${port}/?v=gate`);
+  await 等(3000);
+  const 批 = await win.webContents.executeJavaScript(`(async () => {
+    const q = (s) => document.querySelector(s);
+    const 页 = q('#闸页');
+    if (!页) return { 有页: false };
+    const b = 页.querySelector('.组批');
+    if (!b) return { 有页: true, 有钮: false };
+    const 组 = b.closest('.闸组');
+    const 应有 = 组 ? 组.querySelectorAll('.闸行[data-号]').length : -1;
+    const 框 = q('#说框'); if (框) 框.value = '';
+    b.click();
+    await new Promise((r) => setTimeout(r, 250));
+    const v = 框 ? 框.value : '';
+    return {
+      有页: true, 有钮: true, 应有,
+      条数: v.split('\\n').filter((x) => x.trim().startsWith('TK-') || /^\\s+\\S/.test(x)).length,
+      非空: !!v.trim(),
+      栏还在: !!q('.闸栏'),
+      撞车: document.querySelectorAll('[id^="组身-"]').length > 0
+         && document.querySelectorAll('[id^="闸页身-"]').length > 0,
+    };
+  })()`);
+  记('J5① 「等你拍板」页在壳里装得起来', 批.有页);
+  记('J5② 壳里有说框，所以批量钮要出（独立页没说框时它该藏起来）', 批.有页 && 批.有钮);
+  记('J5③ 点批量钮之后说框**真的被填了**（这条红＝按钮是坏的）', !!批.非空);
+  记('J5④ 带走的条数等于那一组的单数（拿错组会少或多）',
+    批.有钮 && 批.条数 === 批.应有, `实得 ${批.条数} / 应有 ${批.应有}`);
+  记('J5⑤ 页面的组身 id 与旧栏不撞名（aria-controls 指错元素是无声的）',
+    !批.撞车 || 批.条数 === 批.应有,
+    批.栏还在 ? '旧栏仍在场（拆栏是批三），靠相对导航避开' : '旧栏已拆，撞车不复存在');
+  await win.loadURL(`http://127.0.0.1:${port}/`);
+  await 等(400);
+
   // ── 五、滚动条：S16 那条 `*` 的真凶验证 ────────────────────
   const 滚 = await win.webContents.executeJavaScript(`(() => {
     const cs = getComputedStyle(document.documentElement);

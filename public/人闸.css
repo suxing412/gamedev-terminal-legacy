@@ -1,0 +1,132 @@
+/* 人闸.css — 「等你拍板」独立页（2026-09-02 拆栏 · 批二）
+ *
+ * 这一页与那条 340px 的栏比，版式上只做了一件事：**把列摊开**。
+ * 单号 / 题 / 归属 / 闸位 / 停摆 五列各归各位，组头右边腾出批量钮的位置。
+ * 栏里做不到这件事不是没想到，是 340px 里排不下——组注实测被截 74px，
+ * 而那句注正是分堆新增的全部价值。
+ *
+ * 布局关键宽走 grid 定轨，不用嵌套 flex 撑宽（A5 纪律：壳内 Chromium 124
+ * 算错嵌套 flex 宽，且只在 exe 里复现，浏览器与 devtools 都看不出来）。
+ */
+
+.闸页 { display: flex; flex-direction: column; min-height: 0; }
+
+.闸页头 {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s4);
+  padding: var(--s5) var(--s6) var(--s4);
+  border-bottom: 1px solid var(--line);
+}
+.闸页题 { display: flex; align-items: baseline; gap: var(--s3); min-width: 0; }
+.闸页题 h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink); }
+/* 「61 条」一个数不够——它昨天是 61、上周也是 61，对"要不要现在动手"没有分辨力。
+   最久与中位才是那两个会让人转过来的量。 */
+.闸页数 { font: 400 12px var(--mono); color: var(--ink-3); white-space: nowrap; }
+.闸页数.读不到 { color: var(--warn); }
+
+.闸页筛 { display: flex; gap: var(--s1); flex: none; }
+.闸页筛钮 {
+  display: flex; align-items: baseline; gap: 5px;
+  padding: 5px 12px; border: 1px solid transparent; border-radius: 4px;
+  background: transparent; color: var(--ink-3);
+  font: 500 11px var(--sans); cursor: pointer;
+  transition: background 120ms cubic-bezier(0.22, 1, 0.36, 1), color 120ms;
+}
+.闸页筛钮 b { font: 500 11px var(--mono); }
+.闸页筛钮:hover:not(:disabled) { background: var(--raised); color: var(--ink-2); }
+.闸页筛钮:focus-visible { outline: 2px solid var(--gate); outline-offset: 1px; }
+.闸页筛钮.选中 { background: var(--raised); border-color: var(--line); color: var(--ink); }
+.闸页筛钮.选中 b { color: var(--gate-deep); }
+.闸页筛钮:disabled { opacity: 0.4; cursor: default; }
+
+.闸页体 { flex: 1; min-height: 0; }
+.闸页载, .闸页错, .闸页空 {
+  padding: var(--s6); color: var(--ink-2); font-size: 13.5px; line-height: 1.7;
+}
+.闸页错 { color: var(--warn); }
+.闸页空 b { display: block; color: var(--ink); font-weight: 500; margin-bottom: var(--s1); }
+
+/* ── 组 ────────────────────────────────────────────────── */
+.闸组头 {
+  position: sticky; top: 0; z-index: 1;
+  display: flex; align-items: center; gap: var(--s4);
+  padding: var(--s3) var(--s6);
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.组开 {
+  display: flex; align-items: baseline; gap: var(--s2);
+  flex: 1; min-width: 0;
+  border: 0; background: transparent; color: inherit; font: inherit;
+  text-align: left; cursor: pointer; padding: 0;
+}
+.组开:focus-visible { outline: 2px solid var(--gate); outline-offset: 2px; border-radius: 3px; }
+.折箭 { font-size: 9px; color: var(--ink-3); width: 8px; flex: none; }
+.组名 { font: 600 11px var(--sans); letter-spacing: 0.06em; color: var(--ink-2); flex: none; }
+.组开:hover .组名 { color: var(--ink); }
+.组注 { font: 400 10.5px var(--sans); color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.组计 { font: 500 11px var(--mono); color: var(--ink-2); flex: none; }
+.组量 { font: 400 11px var(--mono); color: var(--gate-deep); flex: none; white-space: nowrap; }
+
+/* 批量钮：这一组动作键相同，所以它们是**一件事**不是 N 件。
+   琥珀留给它，因为它就是"要你动手"本身——这块屏唯一强调色的正当用法。 */
+.组批 {
+  flex: none;
+  padding: 5px 12px; border-radius: 4px;
+  border: 1px solid var(--gate-deep); background: var(--gate-wash);
+  color: var(--gate); font: 500 11px var(--sans); cursor: pointer;
+  transition: background 120ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.组批:hover { background: color-mix(in oklch, var(--gate) 18%, transparent); }
+.组批:focus-visible { outline: 2px solid var(--gate); outline-offset: 1px; }
+
+/* ── 行：五列定轨 ──────────────────────────────────────── */
+.闸行 {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) 130px 240px 72px;
+  align-items: center; gap: var(--s4);
+  padding: var(--s3) var(--s6);
+  border-bottom: 1px solid var(--line-soft);
+  cursor: pointer;
+  transition: background 120ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.闸行:hover { background: var(--raised); }
+.闸行:focus-visible { outline: 2px solid var(--gate); outline-offset: -2px; }
+.闸号 { font: 500 12px var(--mono); color: var(--gate); }
+.闸题 { font-size: 13px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.闸谁, .闸位 { font-size: 11px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.闸久 { font: 400 11px var(--mono); color: var(--gate); text-align: right; }
+
+/* 逾期四档：加重而不闪。第四档（≥7×阈）不是为了好看——
+   实测在架的单里绝大多数都过了 3×阈，没有第四档就是"全红等于没红"。 */
+.闸行.久1 .闸久 { color: var(--gate); }
+.闸行.久2 .闸久, .闸行.久2 .闸号 { color: var(--gate-deep); font-weight: 600; }
+.闸行.久3 { background: var(--gate-wash); box-shadow: inset 3px 0 0 var(--gate-deep); }
+.闸行.久3 .闸久, .闸行.久3 .闸号 { color: var(--gate-deep); font-weight: 600; }
+/* 全组同档时底色收掉：底色是"这条比那条急"的语言，全组一档时它只是把页面刷平。
+   组头那句「全部逾期，最久 N」已经把这件事说清楚了，行就还给可读性。 */
+.闸组.齐久 .闸行.久2 { background: transparent; }
+.闸组.齐久 .闸行.久2:hover { background: var(--raised); }
+
+/* 机制行没有单号也没有钟，靠「第 N 条 + 哪一节」定位 */
+.闸行.机 { cursor: default; }
+.闸行.机:hover { background: transparent; }
+.闸行.机 .闸号 { color: var(--ink-2); }
+
+/* ── 议程段：单独一段，不跟单据混排 ──────────────────────
+   它读自 待办-制作人议程.md，实测 mtime 停在 08-28，文件里写死的小时数是错的
+   （写 TK-180 停 192h，实际 337h）。**没有活时钟的东西不能跟有停摆时刻的单据
+   一起参加年龄排序**——混排会让整页的时间轴不可信。 */
+.议程段 { border-top: 1px solid var(--line); margin-top: var(--s5); }
+.议程题 {
+  display: flex; align-items: baseline; gap: var(--s3);
+  margin: 0; padding: var(--s4) var(--s6) var(--s2);
+  font: 600 11px var(--sans); letter-spacing: 0.06em; color: var(--ink-2);
+}
+.议程题 span { font-weight: 400; letter-spacing: 0; font-size: 10.5px; color: var(--ink-3); }
+
+/* 窄屏：后两列先走（归属与闸位在组头里已经说过一遍），
+   **单号、题、停摆三列一格不许藏**——那是这一页的三问。 */
+@media (max-width: 1000px) {
+  .闸行 { grid-template-columns: 92px minmax(0, 1fr) 72px; }
+  .闸谁, .闸位 { display: none; }
+}

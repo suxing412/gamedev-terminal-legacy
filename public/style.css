@@ -205,48 +205,110 @@ body {
  */
 
 /* ── 中栏：对话主体 ── */
-.话栏 { display: flex; flex-direction: column; min-height: 0; background: var(--ground); }
-
-/* ── 在座条：八席常驻可见，点名字开私聊（2026-08-29 制作人拍板）──
-   放在对话之上而不是侧边：这屋里有谁，是「状态先于叙述」的一部分，
-   得不用点、不用滚就看得见（PRODUCT.md 设计原则 1）。 */
-.座条 {
-  display: flex; align-items: center; gap: var(--s3);
-  padding: var(--s2) var(--s5);
-  border-bottom: 1px solid var(--line);
+/* 话栏：对话页是「话流 + 在座栏」两列，看别的页时是整块视图区（2026-09-02 批五）。
+   用 grid 定轨而不是嵌套 flex（A5：壳内 Chromium 124 算错嵌套 flex 宽，只在 exe 里复现）。 */
+.话栏 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
   background: var(--ground);
-  flex: 0 0 auto;
 }
-.座组 { display: flex; flex-wrap: wrap; gap: 2px; min-width: 0; }
+.话流 { grid-column: 1; grid-row: 1; }
+.座栏 { grid-column: 2; grid-row: 1; }
+.视图区 { grid-column: 1 / -1; grid-row: 1; }
+.说区 { grid-column: 1 / -1; grid-row: 2; }
+
+/* ── 在座栏（2026-09-02 拆栏 · 批五）────────────────────────────
+ *
+ * 原来是话流上方那条一行的「在座条」。制作人：「把常驻坐席做得更人性化一点，
+ * 做头像什么的」。**人性化不在头像本身**——一排冷头像照样填不满拆栏之后那片空地；
+ * 是这一栏说清「这屋里有谁、各自管什么」，那片空地才变成一屋子人。
+ *
+ * **只在对话页出现。** 看别的页时 .话流 是 hidden，这一栏跟着收起——
+ * 这正是拆栏要治的那件事（「进其它标签页左右还有列，很奇怪」），
+ * 新加的东西不能把它带回来。
+ */
+.话流[hidden] ~ .座栏 { display: none; }
+.座栏 {
+  width: 300px;
+  border-left: 1px solid var(--line);
+  background: var(--panel);
+  display: flex; flex-direction: column; min-height: 0;
+}
+.座栏头 {
+  display: flex; align-items: baseline; justify-content: space-between; gap: var(--s2);
+  padding: var(--s4) var(--s4) var(--s3);
+  border-bottom: 1px solid var(--line);
+  flex: none;
+}
+.座栏头 h2 { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: var(--ink-2); }
+.座数 { font: 500 11px var(--mono); color: var(--ink-3); }
+.座列 { overflow-y: auto; flex: 1; min-height: 0; }
+
+/* 一席一行：头像 + （名 / 人设）+ 状态点。
+   **人设那句是真数据**（/api/seats 的 人设 字段）。Figma 稿上「正在答话 / 起草 TK-234」
+   那种实时活动**没有实现**：按席的活动现在没有任何数据源，画上去就是编。 */
 .座 {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 4px 9px; border-radius: 6px;
-  border: 1px solid transparent; background: transparent;
-  color: var(--ink-2); font: 400 12px var(--sans); cursor: pointer;
-  transition: background 140ms cubic-bezier(0.16, 1, 0.3, 1), color 140ms;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 11px;
+  align-items: center;
+  width: 100%; text-align: left;
+  padding: var(--s3) var(--s4);
+  border: 0; border-bottom: 1px solid var(--line-soft);
+  background: transparent; color: inherit; font: inherit;
+  cursor: pointer;
+  transition: background 140ms cubic-bezier(0.16, 1, 0.3, 1);
 }
-.座:hover { background: var(--raised); color: var(--ink); }
-.座:focus-visible { outline: 2px solid var(--gate); outline-offset: 1px; }
-.座[disabled] { color: var(--ink); cursor: default; font-weight: 500; }
+.座:hover { background: var(--raised); }
+.座:focus-visible { outline: 2px solid var(--gate); outline-offset: -2px; }
+.座[disabled] { cursor: default; }
 .座[disabled]:hover { background: transparent; }
-.座 .座灯 { width: 5px; height: 5px; border-radius: 50%; background: var(--live); flex: none; }
+
+/* 头像：**形状与字分人，颜色只管状态。**
+   八个人八种颜色会把 tokens.css 那条「唯一强调色只出现在人闸」的纪律冲垮，
+   而那是这块屏唯一不能失守的信号。个体感靠四档中性底色轮换，不引入色相。 */
+.座头 {
+  position: relative;
+  width: 34px; height: 34px; border-radius: 10px;
+  border: 1px solid var(--line);
+  display: grid; place-items: center;
+  font: 500 14px var(--sans); color: var(--ink-2);
+  flex: none;
+}
+.座头.调0 { background: var(--raised); }
+.座头.调1 { background: oklch(0.20 0.006 255); }
+.座头.调2 { background: oklch(0.175 0.006 255); }
+.座头.调3 { background: oklch(0.225 0.007 255); }
+.座头 .座灯 {
+  position: absolute; right: -3px; bottom: -3px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--live);
+  box-shadow: 0 0 0 2.5px var(--panel);
+}
+.座文 { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.座名 { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink); font-weight: 500; }
+.座名 em { font-style: normal; font-size: 10px; color: var(--ink-3); font-weight: 400; }
+.座设 { font-size: 11px; color: var(--ink-3); line-height: 1.45; overflow: hidden;
+        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+
 /* 未接模型的席位不许装作能说话——灯空心、字压暗、标出来 */
-.座.未接 { color: var(--ink-3); }
-.座.未接 .座灯 { background: transparent; box-shadow: inset 0 0 0 1px var(--ink-3); }
-.座.未接 em { font-style: normal; font-size: 10px; color: var(--ink-3); }
+.座.未接 .座名 { color: var(--ink-3); }
+.座.未接 .座头 { color: var(--ink-3); }
+.座.未接 .座灯 { background: transparent; box-shadow: 0 0 0 2.5px var(--panel), inset 0 0 0 1px var(--ink-3); }
 /* 点了未接的席位：给一下回执。**没有回执的点击等于坏掉的按钮**——
    说注 那行字在屏幕另一头，眼睛正落在手指底下时不一定看得见它变了。 */
-.座.拒 { background: var(--gate-wash); border-color: var(--gate-deep); }
+.座.拒 { background: var(--gate-wash); }
 @media (prefers-reduced-motion: no-preference) {
   .座.拒 { animation: 座摇 380ms cubic-bezier(0.36, 0.07, 0.19, 0.97); }
 }
 @keyframes 座摇 { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-2px); } 75% { transform: translateX(2px); } }
-
 /* 选中＝正在私聊这一位 */
-.座.选 { background: var(--gate-wash); border-color: var(--gate); color: var(--gate); }
+.座.选 { background: var(--gate-wash); box-shadow: inset 3px 0 0 var(--gate); }
+.座.选 .座名 { color: var(--gate); }
 .座.选 .座灯 { background: var(--gate); }
-.座注 { margin-left: auto; color: var(--ink-3); font-size: 11px; white-space: nowrap; }
-.座读不到 { color: var(--ink-3); font-size: 12px; border: 1px dashed var(--line); border-radius: 5px; padding: 2px 8px; }
+.座读不到 { padding: var(--s5) var(--s4); color: var(--ink-3); font-size: 12px; line-height: 1.6; }
 
 /* 私聊态：整栏压一道暖色顶边，一眼看出「现在说的话只有一个人听得见」 */
 .台.私聊中 .话栏 { box-shadow: inset 0 2px 0 var(--gate); }

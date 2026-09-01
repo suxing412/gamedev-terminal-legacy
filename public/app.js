@@ -353,7 +353,7 @@ setInterval(查陈旧, 15000);
 let 私聊席 = null;
 let 席况 = new Map();   // 名 → 接模型，点击时要用它判断这一位说不说得了话
 
-const 群说注 = 'Enter 发送 · Shift+Enter 换行 · @ 点名 · 数字键 1-9 选左栏';
+const 群说注 = 'Enter 发送 · Shift+Enter 换行 · @ 点名 · / 聚焦 · F9 半屏塔';
 
 async function 拉在座() {
   const 组 = $('座组');
@@ -362,12 +362,31 @@ async function 拉在座() {
   try { r = await fetch('/api/seats').then((x) => x.json()); }
   catch { 组.innerHTML = '<span class="座读不到">坐席名单读不到</span>'; return; }   // 说读不到，不编
   const 席 = (r && r.席) || [];
-  if (!席.length) { 组.innerHTML = '<span class="座读不到">名单为空 —— 不是零席，是没配</span>'; return; }
+  if (!席.length) { 组.innerHTML = '<div class="座读不到">名单为空 —— 不是零席，是没配</div>'; return; }
   席况 = new Map(席.map((x) => [x.名, !!x.接模型]));
-  组.innerHTML = ['制作人'].concat(席.map((x) => x.名)).map((名) => {
+
+  // 一席一行：头像 + 名 + **人设一句话** + 状态点。
+  //
+  // 人设那句是 /api/seats 的真字段（「从项目全局给出判断与建议，但不直接改台账」）。
+  // **Figma 稿上那行「正在答话 / 起草 TK-234」没有实现**：按席的实时活动
+  // 现在没有任何数据源，画上去就是编一个数——PRODUCT 原则五要挡的正是这一步。
+  //
+  // 头像：**形状与字分人，颜色只管状态。** 八个人八种颜色会把 tokens.css
+  // 那条「唯一强调色只出现在人闸」的纪律冲垮，而那是这块屏唯一不能失守的信号。
+  // 个体感靠四档中性底色轮换（.调0–3），不引入色相。
+  const 全 = ['制作人'].concat(席.map((x) => x.名));
+  const 在岗 = 席.filter((x) => x.接模型).length + 1;      // +1＝制作人
+  const 数元 = $('座数');
+  if (数元) 数元.textContent = `${在岗} 在岗 · ${席.length + 1 - 在岗} 未接`;
+
+  组.innerHTML = 全.map((名, i) => {
     const s = 席.find((x) => x.名 === 名);
-    const 未接 = s && !s.接模型;
+    const 未接 = !!(s && !s.接模型);
     const 选 = 私聊席 === 名;
+    // 制作人不给说明句。**他不在 /api/seats 里**，写一句就只能是我编的，
+    // 而这一栏的全部可信度正在于"每一句都是那一席协议里的原话"。
+    // 名字后面那个「你」已经说清他是谁了。
+    const 设 = 名 === '制作人' ? '' : ((s && s.人设) || '');
     // 未接的席位不 disabled：**disabled 的按钮点了完全没有反应**，
     // 而"点了没反应"正是这轮巡礼在到处抓的那种病。它照常接点击，
     // 只是回答"我还没接模型"——名单里有它是事实，它说不了话也是事实，两句都要说出口。
@@ -375,7 +394,11 @@ async function 拉在座() {
       + (名 === '制作人' ? ' disabled' : '')
       + (未接 ? ` title="${esc(名)}已登记但还没接模型，开不了私聊"` : '')
       + `>`
-      + `<i class="座灯"></i>${esc(名)}${未接 ? '<em>未接</em>' : ''}</button>`;
+      + `<span class="座头 调${i % 4}">${esc(名.slice(0, 1))}<i class="座灯"></i></span>`
+      + `<span class="座文">`
+      + `<span class="座名">${esc(名)}${名 === '制作人' ? '<em>你</em>' : ''}${未接 ? '<em>未接模型</em>' : ''}</span>`
+      + (设 ? `<span class="座设">${esc(设)}</span>` : '')
+      + `</span></button>`;
   }).join('');
 }
 

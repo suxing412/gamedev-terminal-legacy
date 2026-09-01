@@ -422,6 +422,47 @@ async function 跑() {
   await win.loadURL(`http://127.0.0.1:${port}/`);
   await 等(400);
 
+  // ── 四·十、J8：在座栏只在对话页出现，且说的是真数据 ──────────
+  //
+  // 制作人拆栏的原话是「进其它标签页左右两边还有这两列，很奇怪」。
+  // 批五新加的在座栏**必须不把那件事带回来**——它是对话页的一部分，
+  // 不是新的常驻栏。切到别的页签它得跟着收起。
+  //
+  // 另一半盯的是「不许编」：席位那句说明必须来自 /api/seats 的 人设 字段。
+  // Figma 稿上画的是「正在答话 / 起草 TK-234」，那是示意值；
+  // 按席的实时活动现在没有任何数据源，照着画就是在屏上编一个状态。
+  await win.loadURL(`http://127.0.0.1:${port}/`);
+  await 等(3000);
+  const 座 = await win.webContents.executeJavaScript(`(async () => {
+    const q = (s) => document.querySelector(s);
+    const 见 = (el) => !!el && el.getBoundingClientRect().width > 0
+      && getComputedStyle(el).display !== 'none';
+    const 对话页 = {
+      栏见: 见(q('.座栏')),
+      席数: document.querySelectorAll('.座').length,
+      带人设: [...document.querySelectorAll('.座 .座设')].filter((e) => e.textContent.trim()).length,
+      有头像: document.querySelectorAll('.座 .座头').length,
+      样本: (q('.座 .座设') || {}).textContent || '',
+    };
+    const 名单 = await fetch('/api/seats').then((r) => r.json()).catch(() => null);
+    // 切到别的页签
+    const a = [...document.querySelectorAll('.去 a')].find((x) => x.getAttribute('data-jian') === 'watch');
+    if (a) a.click();
+    await new Promise((r) => setTimeout(r, 2500));
+    return { 对话页, 别页栏见: 见(q('.座栏')), 名单: 名单 && (名单.席 || []).map((x) => x.人设) };
+  })()`);
+  记('J8① 对话页有在座栏且画出了席位', 座.对话页.栏见 && 座.对话页.席数 > 1,
+    `${座.对话页.席数} 席`);
+  记('J8② 每席都有头像（形状与字分人，颜色只管状态）',
+    座.对话页.有头像 === 座.对话页.席数, `${座.对话页.有头像}/${座.对话页.席数}`);
+  记('J8③ 席位说明来自 /api/seats 的人设，**不是编的**',
+    座.对话页.带人设 > 1 && (座.名单 || []).some((s) => s && 座.对话页.样本.includes(s.slice(0, 8))),
+    '样本「' + String(座.对话页.样本).slice(0, 28) + '」');
+  记('J8④ **切到别的页签它收起来**（不许把"两边还有列"那件事带回来）',
+    !座.别页栏见, 座.别页栏见 ? '监视页上在座栏还在' : '已收起');
+  await win.loadURL(`http://127.0.0.1:${port}/`);
+  await 等(400);
+
   // ── 五、滚动条：S16 那条 `*` 的真凶验证 ────────────────────
   const 滚 = await win.webContents.executeJavaScript(`(() => {
     const cs = getComputedStyle(document.documentElement);

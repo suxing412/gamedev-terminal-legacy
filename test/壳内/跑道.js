@@ -344,6 +344,40 @@ async function 跑() {
   await win.loadURL(`http://127.0.0.1:${port}/`);
   await 等(400);
 
+  // ── 四·八、J6：产线段并进监视页，两条路都真的画出来了 ──────────
+  //
+  // 主壳右边那条 300px 并到监视页。并过来之后要验的不是"有个框"，
+  // 是**它真的取到数并画了**——首屏骨架由服务端出，数据由 public/监视.js 填，
+  // 中间任何一环断掉，屏上就是一个空框配一句「读取中…」，而那是这一页最难查的样子。
+  //
+  // 两条路都要验：独立整页 /watch 与壳内片段 /?v=watch。**只验一条等于另一条是死的**。
+  const 量产线 = () => win.webContents.executeJavaScript(`(() => {
+    const q = (s) => document.querySelector(s);
+    if (!q('#wpulse')) return { 有: false };
+    const 数 = [...document.querySelectorAll('.wnum')].map((n) =>
+      (n.querySelector('.k') || {}).textContent + '=' + (n.querySelector('.v') || {}).textContent);
+    return {
+      有: true, 抬头: (q('#wpulse-n') || {}).textContent || '',
+      数, 事件流份数: document.querySelectorAll('.wev').length,
+      // 跑龄那把尺必须来自 顶况.js，不能是本页自己再写一份
+      同尺: !!(self.顶况 && typeof self.顶况.龄文 === 'function'),
+    };
+  })()`);
+
+  for (const [名, 址] of [['独立整页', `http://127.0.0.1:${port}/watch`],
+    ['壳内片段', `http://127.0.0.1:${port}/?v=watch`]]) {
+    await win.loadURL(址);
+    await 等(4500);
+    const p = await 量产线();
+    记(`J6·${名} 产线段在`, p.有);
+    记(`J6·${名} 四数真的取到了（不是停在"读取中…"）`,
+      p.有 && p.数.length === 4 && p.数.every((s) => /=\d+$/.test(s)), p.有 ? p.数.join(' · ') : '');
+    记(`J6·${名} 抬头说得出在跑几个`, p.有 && /在跑|读不到/.test(p.抬头), p.有 ? p.抬头 : '');
+    记(`J6·${名} 跑龄用的是 顶况.js 那把尺（不是本页另写一份）`, p.有 && p.同尺);
+  }
+  await win.loadURL(`http://127.0.0.1:${port}/`);
+  await 等(400);
+
   // ── 五、滚动条：S16 那条 `*` 的真凶验证 ────────────────────
   const 滚 = await win.webContents.executeJavaScript(`(() => {
     const cs = getComputedStyle(document.documentElement);

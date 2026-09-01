@@ -154,7 +154,16 @@ function 挂(app, opts = {}) {
     } else {
       const 带 = s.格.filter((g) => g.位 === '带');
       const 主 = s.格.filter((g) => g.位 !== '带');
+      // 产线段（2026-09-02 拆栏 · 批三）：主壳右边那条 300px 的「产线脉搏」并到这里。
+      // 并过来的正当性不只是"腾地方"——**两处本来就在渲染同一批事件**：
+      // app.js 的 事列 与本页的 wev 都调 事流.事条()，同一个渲染函数、两个地方各画一份、
+      // 各自定时刷新。合并之后这一份就只剩一处。
+      // 骨架由服务端出（首屏不留白），数据由 public/监视.js 取 /api/pulse 填。
       body = 渲染带(带)
+        + `<section class="wpulse" id="wpulse">
+  <header class="wpulse-h"><h2>产线</h2><span class="wpulse-n" id="wpulse-n">读取中…</span></header>
+  <div class="wpulse-b"><div class="wnums" id="wnums"></div><div class="wruns" id="wruns"></div></div>
+</section>`
         + `<section class="wgrid" id="wgrid">${主.map(渲染格).join('')}</section>`
         + `<p class="wfoot" id="wfoot">取于 ${转义(s.于本地 || '—')} · 塔根 ${转义(s.塔根 || '')}</p>`;
     }
@@ -163,8 +172,10 @@ function 挂(app, opts = {}) {
       头部: 头({ 当前: 'watch', 标题: '监视' }),
       样式: '/watch.css',
       body: body,
-      // 事流.js 必须排在前面：监视.js 顶层就取 self.事流
-      脚本: '<script src="/事流.js" defer></script><script src="/监视.js" defer></script>',
+      // 事流.js 与 顶况.js 都必须排在前面：监视.js 顶层就取 self.事流 / self.顶况。
+      // 顶况.js 是 2026-09-02 并入产线段时加的——跑龄的写法（龄文）要与顶条同一把尺，
+      // 否则这一页说「4° 12′」而顶条说别的，同一份数据两种说法。
+      脚本: '<script src="/事流.js" defer></script><script src="/顶况.js" defer></script><script src="/监视.js" defer></script>',
     }));
   });
 

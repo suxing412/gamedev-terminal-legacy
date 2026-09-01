@@ -107,10 +107,66 @@
     }).join('');
   }
 
+  // ── 产线段（2026-09-02 拆栏 · 批三）──────────────────────────
+  //
+  // 主壳右边那条 300px 的「产线脉搏」并到这一页。并过来的正当性不只是腾地方：
+  // **两处本来就在渲染同一批事件**——app.js 的 事列 与本页的 wev 都调 事流.事条()，
+  // 同一个渲染函数、两个地方各画一份、各自定时刷新。合并之后只剩一处。
+  //
+  // 措辞与顶条那一格共用 顶况.js 的 龄文（同一把尺）；取不到时说取不到，不摆零。
+  // 跑龄只有一把尺：顶况.js 的 龄文。**不写回落实现**——一个回落就是第二把尺，
+  // 它平时不生效，等哪天 顶况.js 漏挂了就悄悄接管，两边的写法从此各走各的，
+  // 而没有任何东西会报错。
+  //
+  // 但也**不在顶层解引用**。首版写的是 `const 龄文 = self.顶况.龄文;`，
+  // 顶况.js 漏挂时整个模块加载即抛，于是 3 秒轮询、清账委托、片段重挂一个都没注册，
+  // 而首屏是服务端渲染的——**页面看上去完全正常，只是永远不再更新**。
+  // 前端起手.test.js 的「守② 单独加载不抛」当场把这一版拦了下来。
+  // 取尺放到用的时候，取不到就不显示龄（少一个数），而不是显示一个另算出来的数。
+  const 跑了 = (起) => {
+    const t = Date.parse(起 || '');
+    if (Number.isNaN(t)) return '';
+    const 尺 = self.顶况 && self.顶况.龄文;
+    return 尺 ? 尺(Math.floor((Date.now() - t) / 60000)) : '';
+  };
+  async function 画产线() {
+    const 段 = document.getElementById('wpulse'); if (!段) return;
+    const 数元 = document.getElementById('wpulse-n');
+    const 格元 = document.getElementById('wnums');
+    const 跑元 = document.getElementById('wruns');
+    let r;
+    try { r = await fetch('/api/pulse').then((x) => x.json()); } catch { r = { 读不到: true, 因: '终端后端不通' }; }
+    if (r.读不到) {
+      if (数元) { 数元.textContent = '读不到监制台（' + (r.因 || '') + '）'; 数元.className = 'wpulse-n unk'; }
+      if (格元) 格元.innerHTML = '';
+      if (跑元) 跑元.innerHTML = '<p class="unk">读不到 —— 不是零，是没读着</p>';
+      return;
+    }
+    const c = r.计数 || {};
+    const 跑 = r.在跑 || [];
+    if (数元) { 数元.className = 'wpulse-n'; 数元.textContent = 跑.length ? '在跑 ' + 跑.length : '零在跑'; }
+    if (格元) {
+      格元.innerHTML = [
+        ['在途', (c['在途'] || 0) + (c['初检'] || 0) + (c['核查'] || 0) + (c['仲裁'] || 0)],
+        ['待派', (c['待派'] || 0) + (c['待重派'] || 0) + (c['已排期'] || 0)],
+        ['候验收', c['完成'] || 0],
+        ['已落袋', c['归档'] || 0],
+      ].map(([标, 值]) => '<div class="wnum"><span class="k">' + 标 + '</span><b class="v'
+        + (值 ? '' : ' 零') + '">' + 值 + '</b></div>').join('');
+    }
+    if (跑元) {
+      跑元.innerHTML = 跑.length
+        ? 跑.map((x) => '<div class="wrun"><i class="wdot"></i><span class="n">' + 转义(x.单)
+          + '</span><span class="e">' + 转义(x.环节) + '</span><span class="t">' + 跑了(x.起时) + '</span></div>').join('')
+        : '<p class="unk">无在跑会话</p>';
+    }
+  }
+
   async function 一轮() {
     if (停) return;
     const 网 = 取网(); const 脚 = 取脚();
     if (!网) return;            // 不在监视视图上，空跑
+    画产线();                    // 与状态格各走各的请求：一边取不到不该把另一边也拖黑
     let s;
     try { s = await fetch('/api/watch').then((x) => x.json()); }
     catch { if (脚) 脚.textContent = '取不到状态 —— 终端后端不通'; return; }

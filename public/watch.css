@@ -222,3 +222,46 @@ body, .视图 {
   .wev-i { grid-template-columns: 54px minmax(0, 1fr) auto auto; }
   .wev-i .src { display: none; }
 }
+
+/* ── 产线段（2026-09-02 拆栏 · 批三）────────────────────────────
+ * 主壳右边那条 300px 的「产线脉搏」并到这一页。
+ * 并过来的正当性不只是腾地方：**两处本来就在渲染同一批事件**——
+ * app.js 的 事列 与本页的 wev 都调 事流.事条()，同一个渲染函数、
+ * 两处各画一份、各自定时刷新。合并之后只剩一处。
+ *
+ * 数字用等宽（tnum）：轮询每 3 秒重画一次，比例字宽的数字会让整行左右抖。
+ */
+.wpulse {
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--panel);
+  margin-bottom: var(--s5);
+  overflow: hidden;
+}
+.wpulse-h {
+  display: flex; align-items: baseline; justify-content: space-between; gap: var(--s3);
+  padding: var(--s3) var(--s4);
+  border-bottom: 1px solid var(--line);
+}
+.wpulse-h h2 { margin: 0; font: 600 12px var(--sans); letter-spacing: 0.06em; color: var(--ink-2); }
+.wpulse-n { font: 400 11px var(--mono); color: var(--ink-3); }
+.wpulse-n.unk { color: var(--warn); }
+
+/* 定轨而非嵌套 flex 撑宽（A5：壳内 Chromium 124 算错嵌套 flex 宽，只在 exe 里复现） */
+.wpulse-b { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: var(--s5); padding: var(--s4); }
+.wnums { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s4); align-content: start; }
+.wnum { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.wnum .k { font-size: 11px; color: var(--ink-3); }
+.wnum .v { font: 500 22px/1.1 var(--mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+.wnum .v.零 { color: var(--ink-3); }
+
+.wruns { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.wrun { display: grid; grid-template-columns: 5px minmax(0, 1fr) auto auto; align-items: center; gap: var(--s3); }
+.wrun .n { font: 500 12px var(--mono); color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wrun .e { font-size: 11px; color: var(--ink-3); }
+.wrun .t { font: 400 11px var(--mono); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.wruns .unk { margin: 0; }
+
+@container 视 (max-width: 900px) {
+  .wpulse-b { grid-template-columns: minmax(0, 1fr); }
+  .wnums { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}

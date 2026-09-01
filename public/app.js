@@ -13,6 +13,10 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
 // 签名比对（原则④）：内容没变就一个字节都不碰 DOM——常驻整天，无谓重绘是打扰也是耗电
 const 签 = {};
 function 若变(键, 元, html) {
+  // **元素不在就当没这回事。**拆栏（2026-09-02）之后闸栏与脉栏搬去了独立页，
+  // 主壳里这些 id 全是 null；不挡这一下，一个 null.innerHTML 会把整轮取数打断，
+  // 而表现是「顶条永远停在 —，且不报错」。
+  if (!元) return false;
   if (签[键] === html) return false;
   签[键] = html; 元.innerHTML = html; return true;
 }
@@ -58,17 +62,62 @@ async function 拉人闸() {
     fetch('/api/gates').then((x) => x.json()).catch(() => ({ 读不到: true, 因: '坐席后端不通' })),
     fetch('/api/agenda').then((x) => x.json()).catch(() => ({ 读不到: true, 因: '坐席后端不通' })),
   ]);
-  const 列 = $('闸列');
-
   const 单 = g.读不到 ? [] : (g.债 || []);
   const 机 = a.读不到 ? [] : (a.事 || []);
   闸表 = [...单.map((d) => ({ ...d, 类: '单' })), ...机.map((d) => ({ ...d, 类: '机' }))];
-
-  const 总 = g.读不到 ? '读不到' : String(单.length + 机.length);
-  $('闸数').textContent = g.读不到 ? '读不到' : `${单.length} 单 · ${机.length} 机制`;
-  $('顶闸').textContent = 总;
-
   const 阈 = g.逾期阈值小时 || 24;
+  if (!g.读不到) 取数时.gates = Date.now();      // 陈旧哨的打点：只在真取到时盖章
+
+  // **顶条先写，页面后画。**这两件事必须分开，理由是拆栏（2026-09-02）：
+  // 那一栏搬去独立页之后，`$('闸列')` 在主壳里是 null；
+  // 而原来这两件事挤在同一个函数里，取到 null 的那一行会抛，
+  // 于是**顶条永远停在 `—`，而且不报错**——「静止的活人」的教科书写法。
+  // 现在顶条这一路不碰任何栏内元素，画栏那一路自己判在不在。
+  写顶闸(g, 单, 阈);
+  画闸列(g, a, 单, 机, 阈);
+}
+
+/** 顶条人闸格。只碰 #顶闸，与栏在不在无关。 */
+function 写顶闸(g, 单, 阈) {
+  const 元 = $('顶闸'); if (!元) return;
+  let 词元 = 元.querySelector('.闸词');
+  if (!词元) { 词元 = document.createElement('b'); 词元.className = '闸词'; 元.appendChild(词元); }
+  const 旧章 = 元.querySelector('.闸章'); if (旧章) 旧章.remove();
+
+  if (g.读不到) {
+    词元.className = '闸词 读不到';
+    词元.textContent = '人闸 读不到';
+    元.title = `读不到监制台（${g.因 || ''}）—— 这一格现在不可信，别拿它当"没事"`;
+    return;
+  }
+  // 批们走**同一个 分闸组**，与页面上那一栏共用一把尺；两边各分各的必然分家。
+  // 议程（机制）那一批**不进顶条**：它读自 待办-制作人议程.md，实测 mtime 停在 08-28，
+  // 文件里写死的小时数是错的（写 TK-180 停 192h，实际 337h）——没有活时钟的东西
+  // 不能参加年龄排序，它进「等你拍板」页的第二段。
+  const 批们 = 分闸组(单, [], 阈, '全')
+    .filter((z) => z.类 === '单')
+    // **取 动键（短）不取 动（长）。** 动 是指引「通过归档／打回」，
+    // 顶条那 232px 的轨装不下它——实测溢出并把年龄章挤出可视区。
+    .map((z) => ({ 动作键: z.动键, 闸名: z.名, n: z.计, 最久小时: (z.形 && z.形.最久) || 0 }));
+  const r = 顶况文.人闸文(批们, 阈, 久档);
+
+  词元.className = '闸词';
+  词元.innerHTML = r.词组.map((x) => `<b>${x.n}</b><i>${esc(x.词)}</i>`).join('<s> · </s>')
+    + (r.余 ? `<s> </s><b>+${r.余}</b>` : '');
+  if (r.章) {
+    const 章 = document.createElement('i');
+    章.className = `闸章 久${r.档}`;
+    章.textContent = r.章;
+    元.appendChild(章);
+  }
+  元.title = r.文 + (r.章 ? ` · 最久 ${时长文(r.最久小时)}` : '');
+}
+
+/** 「等你拍板」那一栏。**栏不在就静默跳过**——它已经拆成独立页。 */
+function 画闸列(g, a, 单, 机, 阈) {
+  const 列 = $('闸列'); if (!列) return;
+  const 数元 = $('闸数');
+  if (数元) 数元.textContent = g.读不到 ? '读不到' : `${单.length} 单 · ${机.length} 机制`;
   const 段 = [];
 
   // 概览兼筛选。既然要在栏头说"多少件"，就让这句话同时能点——
@@ -140,18 +189,44 @@ async function 拉人闸() {
 async function 拉脉搏() {
   let r;
   try { r = await fetch('/api/pulse').then((x) => x.json()); } catch { r = { 读不到: true, 因: '坐席后端不通' }; }
-  const 灯 = $('脉灯'); const 文 = $('脉文');
+  if (!r.读不到) 取数时.pulse = Date.now();      // 陈旧哨的打点：只在真取到时盖章
+  写顶产(r);                     // 顶条：与脉栏在不在无关
+  画脉栏(r);                     // 页面：脉栏已并进监视页，主壳里它不在
+}
+
+/** 顶条的脉点与产线格。只碰 #脉点 / #顶产。 */
+function 写顶产(r) {
+  const 点 = $('脉点');
+  if (点) {
+    // 绿只表示 board **与** runner 都通。原来的「监制台在线」绿得不诚实：
+    // server.js 的 Promise.all 只对 board.读不到 短路，runner 单独挂掉照样绿。
+    点.className = r.读不到 ? '脉 断' : (r.双通 === false ? '脉 断' : '脉 活');
+    点.title = r.读不到 ? `读不到监制台（${r.因 || ''}）`
+      : (r.双通 === false ? '监制台通，但派单器读不到' : '监制台与派单器都通');
+  }
+  const 元 = $('顶产'); if (!元) return;
+  const c = r.计数 || {};
+  const s = 顶况文.产线文({
+    读不到: !!r.读不到,
+    在跑: r.读不到 ? null : (r.在跑 || []).map((x) => ({ 单号: x.单, 起时: x.起时 })),
+    待派: (c['待派'] || 0) + (c['待重派'] || 0) + (c['已排期'] || 0),
+    在途: (c['在途'] || 0) + (c['初检'] || 0) + (c['核查'] || 0) + (c['仲裁'] || 0),
+    闸数: 闸表.length,
+  });
+  元.textContent = s.文;
+  元.className = '顶产' + (s.级 === '警' ? ' 警' : s.级 === '弱' ? ' 弱' : '');
+}
+
+/** 「产线脉搏」那一栏。**栏不在就静默跳过**——它已并进监视页。 */
+function 画脉栏(r) {
+  if (!$('计格') && !$('跑列') && !$('塔况')) return;
   if (r.读不到) {
-    灯.className = '脉 断'; 文.textContent = '读不到 :4270';
-    $('顶跑').textContent = '—';
     若变('计', $('计格'), '');
     若变('跑', $('跑列'), `<div class="读不到">读不到监制台（${esc(r.因)}）</div>`);
     return;
   }
-  灯.className = '脉 活'; 文.textContent = '监制台在线';
   const c = r.计数 || {};
   const 跑 = r.在跑 || [];
-  $('顶跑').textContent = 跑.length;
 
   const 格 = [
     ['在途', (c['在途'] || 0) + (c['初检'] || 0) + (c['核查'] || 0) + (c['仲裁'] || 0), 跑.length > 0],
@@ -169,9 +244,14 @@ async function 拉脉搏() {
     ? `<div class="跑"><span class="环" style="color:var(--warn)">上轮拒因 ${r.拒因.length} 项</span></div>` : '';
   若变('跑', $('跑列'), 跑html + 拒);
 
-  // 塔形态的一行摘要：脉栏收了，但「产线活着没有」不能跟着丢
-  const 在途 = (c['在途'] || 0) + (c['初检'] || 0) + (c['核查'] || 0) + (c['仲裁'] || 0);
-  $('塔况').innerHTML = `在途 <b>${在途}</b> · 在跑 <b>${跑.length}</b> · 待派 <b>${(c['待派'] || 0) + (c['已排期'] || 0)}</b>`;
+  // 塔形态的一行摘要。**它的活已经被顶条产线格接走了**（2026-09-02 拆栏）：
+  // 塔况 长在 .闸栏 里，闸栏搬走它就跟着没了。留这段是给"栏还在"的过渡期用的，
+  // 顶条那一格才是现在的正主——迁移动作显式写在这里，是因为漏掉它会静默断掉两条降级路。
+  const 塔 = $('塔况');
+  if (塔) {
+    const 在途 = (c['在途'] || 0) + (c['初检'] || 0) + (c['核查'] || 0) + (c['仲裁'] || 0);
+    塔.innerHTML = `在途 <b>${在途}</b> · 在跑 <b>${跑.length}</b> · 待派 <b>${(c['待派'] || 0) + (c['已排期'] || 0)}</b>`;
+  }
 }
 
 // ---- 右栏：事件流 ----
@@ -295,7 +375,17 @@ function 上带(i) {
 function 收带() { 带的单 = null; $('带').classList.remove('显'); }
 
 // ---- 接线 ----
-$('闸列').addEventListener('click', (e) => {
+//
+// **顶层的 addEventListener 必须挡一道。**这一行原来是裸的 `$('闸列').addEventListener`，
+// 而闸栏拆成独立页之后主壳里没有 #闸列——顶层一句 `null.addEventListener` 会让
+// **这一行往后的整份 app.js 停止执行**：顶条不刷新、在座条不画、说框发不出去，
+// 而控制台之外没有任何迹象。这是本项目命名过的那类故障（「静止的活人」）里最贵的一种，
+// 因为它看起来像"这一版什么都没做"。
+// 统一用它绑，别再写裸的 `$('x').addEventListener`——下一次搬走某个元素时，
+// 差别就是「那一格不刷新」和「整个前端停在这一行」。
+const 绑 = (id, 事, 手) => { const el = $(id); if (el) el.addEventListener(事, 手); return !!el; };
+
+绑('闸列', 'click', (e) => {
   const 头 = e.target.closest('.组头.可折');
   if (头) {
     // 当场翻，不等下一轮轮询——折叠是"我现在不想看这一堆"，
@@ -344,12 +434,12 @@ document.addEventListener('keydown', (e) => {
 async function 拉凭据() {
   let c;
   try { c = await fetch('/api/cred').then((x) => x.json()); } catch { return; }
-  const 幅 = $('凭幅');
-  // 文案在 public/顶况.js（判据要 require 它）。
-  // 原来这里是 `登录 ${Math.floor(c.剩余分/60)}h`——40 分钟写成「登录 0h」，
-  // 而横幅的临期线是 30 分，于是 30–59 分之间顶栏喊 0、横幅说没事，同一份数据两种说法。
-  $('顶凭').textContent = 顶况文.登录文(c.态, c.剩余分);
-  $('顶凭').title = c.到期 ? `到期 ${c.到期}` : '';
+  const 幅 = $('凭幅'); if (!幅) return;
+  // **顶条那格登录读数删了**（2026-09-02 评审）：16 条 OAuth 事件里 11 条正文
+  // 自己写着「通常不需要动手」，9 次自续日志逐条写「未惊动制作人」——
+  // 一个常年不需要动作的读数占着 59px 的常驻宽。
+  // **但凭幅这条保险一个字不改**：它直读 expiresAt，60 秒内出横幅并给出那条命令。
+  // 删的是常驻读数，不是那道闸。文案仍在 public/顶况.js（判据要 require 它）。
   if (c.态 === '有效') { 幅.hidden = true; return; }
   $('凭文').textContent = c.态 === '过期'
     ? `登录已过期 ${Math.abs(c.剩余分)} 分钟——坐席说不了话，产线也不会派单。重登即恢复：`
@@ -360,19 +450,35 @@ async function 拉凭据() {
   幅.hidden = false;
 }
 
+// 额度：**顶条那格删了，改成过线才长出一条横幅。**
+//
+// 理由不是"省宽度"，是**这块表量的不是把闸的那个量**：
+// 2026-08-26 00:06 真 hit limit 的那一分钟，5h 窗读数是 7%。改阈值救不了它。
+// 而实测 9.8 天 10342 行里 max 只有 79/84，`.紧` 在 public/*.css 零命中——
+// 过线时屏上根本不变色。一个常年在 20% 徘徊、过线时又不吭声的读数，
+// 占着 127px 的常驻宽，促成的动作是零。
+//
+// 触发线是**任一池 ≥85%**，不是"两池同时"：codex 侧实测 9.8 天零读数，
+// 「两池同时」在这份数据上是恒假合取（miss M5）。两池都取，不再只取 claude。
+const 额度线 = 85;
 async function 拉额度() {
   let q;
   try { q = await fetch('/api/quota').then((x) => x.json()); } catch { return; }
-  if (q.读不到) { $('顶额').textContent = '额度读不到'; $('顶额').title = ''; return; }
-  // 两个窗口都报：5 小时那个决定「这一小时还干不干得动」，周那个决定「这周还能开几张单」。
-  // 原来只报周窗口，还把整串重置时刻摆出来（实测 197px，占顶况的 31%），
-  // 而真正会当场把人拦住的 5 小时窗口一个字都没有。
-  // **整份窗口原样交出去**，这里不挑不筛——挑哪个、怎么写是 顶况.js 的事，
-  // 在这里先滤一道就等于把同一个决定放在两处，而其中一处没有判据看着。
-  const r = 顶况文.额度文((q.claude || {}).windows);
-  $('顶额').textContent = r.文;
-  $('顶额').title = r.详;
-  $('顶额').classList.toggle('紧', !!r.紧);
+  const 幅 = $('额幅'); if (!幅) return;
+  if (q.读不到) { 幅.hidden = true; return; }
+  const 池们 = [['claude', q.claude], ['codex', q.codex]].filter(([, v]) => v && Array.isArray(v.windows));
+  let 最 = null;
+  for (const [名, v] of 池们) {
+    // **整份窗口原样交出去**，这里不挑不筛——挑哪个、怎么写是 顶况.js 一处的决定。
+    const r = 顶况文.额度文(v.windows, 额度线);
+    if (!r.紧) continue;
+    const 高 = Math.max(...v.windows.map((w) => Number(w.pct) || 0));
+    if (!最 || 高 > 最.高) 最 = { 池: 名, r, 高 };
+  }
+  if (!最) { 幅.hidden = true; return; }
+  const 文 = $('额文');
+  if (文) 文.textContent = `${最.池} 额度 ${最.r.紧} 窗口过 ${额度线}%：${最.r.详}`;
+  幅.hidden = false;
 }
 
 $('凭抄').addEventListener('click', async () => {
@@ -394,8 +500,31 @@ function 换形态(要塔, 记 = true) {
 $('形态钮').addEventListener('click', () => 换形态(!document.querySelector('.台').classList.contains('塔')));
 try { if (localStorage.getItem(塔键) === '塔') 换形态(true, false); } catch { /* 读不到就用默认全屏 */ }
 
-const 走钟 = () => { $('顶钟').textContent = new Date().toTimeString().slice(0, 5); };
-走钟(); setInterval(走钟, 20000);
+// ---- 陈旧哨：钟的替代品（2026-09-02 评审）----
+//
+// **钟删了**：只有 HH:MM 没有日期、是本机钟不与监制台对表、
+// 而 `catch{return}` 那三处让它在取数全断的时候照常跳——把死屏渲染成活屏。
+//
+// **但没有换成常驻的「新鲜度」读数**，尽管三版提案都想换。三条理由：
+//   ① 砍钟的理由是「顶条唯一持续运动的元素」，而新鲜格要 5 秒一跳——同一条理由，它犯得更重。
+//   ② 它与「连喂两轮相同数据、DOM 写入计数为 0」那条判据逻辑互斥，二者必死一个。
+//   ③ 它冻住时的字面是 `8″前`——**伪装成最健康**。钟冻住至少还能跟任务栏的钟比对
+//      （main.js 用的是 maximize 不是 kiosk，任务栏就在同一块屏上）。
+// 所以做成**陈旧才出现**：平时零像素、零 DOM 写入。
+const 取数时 = { gates: 0, pulse: 0 };
+const 周期 = { gates: 20000, pulse: 10000 };
+function 查陈旧() {
+  const 幅 = $('陈幅'); if (!幅) return;
+  const 现 = Date.now();
+  const 坏 = Object.keys(周期)
+    .filter((k) => 取数时[k] && 现 - 取数时[k] > 周期[k] * 3)
+    .map((k) => `${k} 停 ${Math.round((现 - 取数时[k]) / 60000)} 分`);
+  if (!坏.length) { 幅.hidden = true; return; }
+  const 文 = $('陈文');
+  if (文) 文.textContent = `数据不再更新：${坏.join(' · ')}。屏上这些数是旧的。`;
+  幅.hidden = false;
+}
+setInterval(查陈旧, 15000);
 
 // ---- 在座条（2026-08-29：主页面即群聊，私聊从群里分出去）----
 // 名单只有一处事实源：server/lib/坐席.js，经 /api/seats 下发。

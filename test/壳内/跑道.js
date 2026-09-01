@@ -177,6 +177,128 @@ async function 跑() {
       稿.类筛溢 <= 0, '溢出 ' + 稿.类筛溢 + 'px');
   }
 
+  // ── 四·五、J3：顶条三格在真壳里量（2026-09-02 拆栏评审）─────────
+  //
+  // **这条是整套顶条规格唯一的保险，所以它先于版面落地。**
+  // 评审那 462px 的宽度算术全部出自 Chrome；而本仓记着壳内 Chromium 124
+  // 算错嵌套 flex 宽——exe 独有，浏览器与 devtools 都复现不了。
+  // 顶条为此从 flex 改成了 grid 定轨，但「定轨就不会错」是个判断不是事实。
+  // 无论 124 怎么算，只要有一格被挤出去，scrollWidth > clientWidth 就会红。
+  //
+  // 拆栏之后这条 44px 扛着 PRODUCT 原则一的三问，所以逐档还要验
+  // 「三问各有一个真可见的元素」——按 data-问 认人，不按 id 猜：
+  // 改 id 不会让判据静默失效，删掉 data-问 才会，那是有意的。
+  const 量顶条 = () => win.webContents.executeJavaScript(`(() => {
+    const q = (s) => document.querySelector(s);
+    const 顶 = q('.顶'); const 况 = q('.顶况'); const 钮 = q('#形态钮');
+    if (!顶 || !况) return { 有: false };
+    const 可见 = (el) => {
+      if (!el) return null;
+      const cs = getComputedStyle(el); const r = el.getBoundingClientRect();
+      return { 显: cs.display !== 'none' && cs.visibility !== 'hidden' && r.width > 0,
+               宽: Math.round(r.width), 右: Math.round(r.right) };
+    };
+    const 三问 = {};
+    for (const k of ['活', '跑', '等']) 三问[k] = 可见(q('[data-问="' + k + '"]'));
+    return {
+      有: true, 窗: window.innerWidth,
+      顶溢: 顶.scrollWidth - 顶.clientWidth,
+      况溢: 况.scrollWidth - 况.clientWidth,
+      三问, 钮: 可见(钮),
+      // 年龄章绝不许被截掉：它是原则三「逾期会变重」的唯一载体
+      章: (() => { const c = q('.闸章'); if (!c) return null;
+        const r = c.getBoundingClientRect(); return { 宽: Math.round(r.width), 右: Math.round(r.right) }; })(),
+    };
+  })()`);
+
+  for (const 目标 of [1600, 1280, 1100, 820, 460, 360]) {
+    if (目标 < 窗最小[0]) win.setMinimumSize(360, 200);
+    else win.setMinimumSize(窗最小[0], 窗最小[1]);
+    const 真宽 = await 调宽(win, 目标);
+    // **到不了的档要明说**，不许当成过了——静默跳过正是本仓反复吃亏的那件事
+    if (Math.abs(真宽 - 目标) > 40) {
+      记(`J3@${目标} 这一档达不到（屏宽不够，实得 ${真宽}）——本档未验`, true, '未验，非通过');
+      continue;
+    }
+    const m = await 量顶条();
+    记(`J3@${目标} 顶条不横向溢出`, m.有 && m.顶溢 <= 0, m.有 ? `溢出 ${m.顶溢}px` : '找不到 .顶');
+    记(`J3@${目标} 读数区不横向溢出`, m.有 && m.况溢 <= 0, m.有 ? `溢出 ${m.况溢}px` : '');
+    for (const [k, 名] of [['活', '活着没有'], ['跑', '在跑什么'], ['等', '谁在等我']]) {
+      const v = m.有 && m.三问[k];
+      记(`J3@${目标} 三问·${名} 有一个真可见的元素且落在窗内`,
+        !!(v && v.显 && v.右 <= m.窗 + 1), v ? `宽 ${v.宽} 右缘 ${v.右} / 窗 ${m.窗}` : '找不到 [data-问]');
+    }
+    记(`J3@${目标} 形态钮落在窗内（塔态下它是唯一的回程）`,
+      !!(m.有 && m.钮 && m.钮.显 && m.钮.右 <= m.窗 + 1),
+      m.钮 ? `右缘 ${m.钮.右} / 窗 ${m.窗}` : '找不到形态钮');
+    if (m.有 && m.章) {
+      记(`J3@${目标} 年龄章没被截掉（它是"逾期会变重"的唯一载体）`,
+        m.章.宽 > 0 && m.章.右 <= m.窗 + 1, `宽 ${m.章.宽} 右缘 ${m.章.右} / 窗 ${m.窗}`);
+    }
+  }
+
+  // 塔态单独量一遍：main.js 把塔宽钳在 360–460，而**塔态永远 ≤820**，
+  // 原来那两条 :not() 白名单求交只剩一个钟——三问一条都答不了，且那是常态不是边角。
+  win.setMinimumSize(360, 200);
+  await win.webContents.executeJavaScript(`document.querySelector('.台').classList.add('塔'); true`);
+  const 塔宽实 = await 调宽(win, 420);
+  const 塔 = await 量顶条();
+  记('J3·塔 渲染进程真的看见了塔宽（不然下面几条是在宽窗上测的）', 塔宽实 <= 470, '实得 ' + 塔宽实);
+  记('J3·塔 顶条不横向溢出', 塔.有 && 塔.顶溢 <= 0, 塔.有 ? `溢出 ${塔.顶溢}px` : '');
+  for (const [k, 名] of [['活', '活着没有'], ['跑', '在跑什么'], ['等', '谁在等我']]) {
+    const v = 塔.有 && 塔.三问[k];
+    记(`J3·塔 三问·${名} 在塔态仍然可见`, !!(v && v.显 && v.右 <= 塔.窗 + 1),
+      v ? `宽 ${v.宽} 右缘 ${v.右} / 窗 ${塔.窗}` : '找不到 [data-问]');
+  }
+  记('J3·塔 形态钮仍在窗内', !!(塔.钮 && 塔.钮.显 && 塔.钮.右 <= 塔.窗 + 1),
+    塔.钮 ? `右缘 ${塔.钮.右} / 窗 ${塔.窗}` : '');
+  await win.webContents.executeJavaScript(`document.querySelector('.台').classList.remove('塔'); true`);
+  win.setMinimumSize(窗最小[0], 窗最小[1]);
+  await 调宽(win, 1400);
+
+  // ── 四·六、J4：**提前验拆栏那一天** ──────────────────────────
+  //
+  // 闸栏与脉栏要搬去独立页。搬走之后主壳里 `$('闸列')`、`$('计格')`、`$('塔况')`
+  // 全是 null，而原来取数与画栏挤在同一个函数里——一句 `null.innerHTML` 就会让
+  // **那一轮往后的整份 app.js 停止执行**：顶条永远停在 `—`，而且不报错、不白屏。
+  // 这是本仓命名过的那类故障里最贵的一种，因为它看起来像"这一版什么都没做"。
+  //
+  // 所以在版面真拆之前，先在壳里把两栏摘掉，看顶条还刷不刷新。
+  // 这条红了就说明拆栏那天会当场踩雷——而那天再发现，代价是一个晚上。
+  const 摘 = await win.webContents.executeJavaScript(`(() => {
+    for (const s of ['.闸栏', '.脉栏']) { const el = document.querySelector(s); if (el) el.remove(); }
+    const 产 = document.getElementById('顶产');
+    const 闸 = document.getElementById('顶闸');
+    // 先擦掉，这样"还在原地"和"被重新写过"分得开
+    if (产) 产.textContent = '__擦__';
+    if (闸) 闸.innerHTML = '<b class="闸词">__擦__</b>';
+    return { 摘掉了: !document.querySelector('.闸栏') && !document.querySelector('.脉栏') };
+  })()`);
+  记('J4① 两栏真的从 DOM 里摘掉了（不然下面几条是在完整壳上测的）', 摘.摘掉了);
+
+  // 脉搏 10s 一拍、人闸 20s 一拍：等够一轮人闸，两格都会被重写
+  await 等(23000);
+  const 拆后 = await win.webContents.executeJavaScript(`(() => {
+    const 产 = document.getElementById('顶产');
+    const 闸 = document.getElementById('顶闸');
+    return {
+      产: 产 ? 产.textContent : null,
+      闸: 闸 ? 闸.textContent : null,
+      // 顶层脚本若在中途抛掉，后面这些接线就没绑上——用它当"整份脚本跑完了"的凭据
+      有形态钮接线: !!document.getElementById('形态钮'),
+      座位画了: !!document.querySelector('.座'),
+    };
+  })()`);
+  记('J4② 两栏摘掉之后，顶条产线格仍在刷新（不是停在擦掉的那个值）',
+    拆后.产 && 拆后.产 !== '__擦__', '实得「' + 拆后.产 + '」');
+  记('J4③ 两栏摘掉之后，顶条人闸格仍在刷新',
+    拆后.闸 && !/__擦__/.test(拆后.闸), '实得「' + 拆后.闸 + '」');
+  记('J4④ 顶层接线没被中途抛掉的异常吃掉（在座条画出来了）',
+    拆后.座位画了, '在座条 ' + (拆后.座位画了 ? '有席位' : '为空 —— app.js 多半停在某个 null 上'));
+
+  await win.loadURL(`http://127.0.0.1:${port}/`);      // 摘过 DOM，后面的判据要干净的一份
+  await 等(400);
+
   // ── 五、滚动条：S16 那条 `*` 的真凶验证 ────────────────────
   const 滚 = await win.webContents.executeJavaScript(`(() => {
     const cs = getComputedStyle(document.documentElement);

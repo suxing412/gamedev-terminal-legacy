@@ -461,3 +461,18 @@ body {
 @media (min-width: 2200px) {
   .台 { grid-template-columns: 400px minmax(0, 1fr) 400px; }
 }
+
+/* 在答态（2026-09-02 批六）：这一席此刻有一条 /api/say 在跑。
+   那句「在做什么」来自坐席自己报的 tool_use，与屏上转圈处是同一句。
+   **走 --live 不走琥珀**：琥珀是人闸的专色，借了就毁掉"谁在等我"那个唯一信号。 */
+.座做 {
+  font-size: 11px; color: var(--live); line-height: 1.45;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.座.在答 .座灯 { background: var(--live); }
+@media (prefers-reduced-motion: no-preference) {
+  .座.在答 .座灯 { animation: 座答 1.6s ease-in-out infinite; }
+}
+/* 只有这一处会持续动，而它表示的正是「此刻真的有东西在跑」——
+   PRODUCT 原则④「安静是默认，动是信号」：动的时候确实是个信号。 */
+@keyframes 座答 { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }

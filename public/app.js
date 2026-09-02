@@ -360,9 +360,9 @@ async function 拉在座() {
   if (!组) return;
   let r;
   try { r = await fetch('/api/seats').then((x) => x.json()); }
-  catch { 组.innerHTML = '<span class="座读不到">坐席名单读不到</span>'; return; }   // 说读不到，不编
+  catch { 若变('座', 组, '<div class="座读不到">坐席名单读不到</div>'); return; }   // 说读不到，不编
   const 席 = (r && r.席) || [];
-  if (!席.length) { 组.innerHTML = '<div class="座读不到">名单为空 —— 不是零席，是没配</div>'; return; }
+  if (!席.length) { 若变('座', 组, '<div class="座读不到">名单为空 —— 不是零席，是没配</div>'); return; }
   席况 = new Map(席.map((x) => [x.名, !!x.接模型]));
 
   // 一席一行：头像 + 名 + **人设一句话** + 状态点。
@@ -376,10 +376,25 @@ async function 拉在座() {
   // 个体感靠四档中性底色轮换（.调0–3），不引入色相。
   const 全 = ['制作人'].concat(席.map((x) => x.名));
   const 在岗 = 席.filter((x) => x.接模型).length + 1;      // +1＝制作人
+  const 在答数 = 席.filter((x) => x.在答).length;
   const 数元 = $('座数');
-  if (数元) 数元.textContent = `${在岗} 在岗 · ${席.length + 1 - 在岗} 未接`;
+  if (数元) {
+    数元.textContent = 在答数
+      ? `${在答数} 在答 · ${在岗} 在岗`
+      : `${在岗} 在岗 · ${席.length + 1 - 在岗} 未接`;
+  }
 
-  组.innerHTML = 全.map((名, i) => {
+  const 前 = (t) => {
+    if (!t) return '';
+    const m = Math.floor((Date.now() - Date.parse(t)) / 60000);
+    if (!Number.isFinite(m) || m < 0) return '';
+    if (m < 1) return '刚说完';
+    if (m < 60) return m + ' 分钟前说过';
+    if (m < 2880) return Math.floor(m / 60) + ' 小时前说过';
+    return Math.floor(m / 1440) + ' 天前说过';
+  };
+
+  const html = 全.map((名, i) => {
     const s = 席.find((x) => x.名 === 名);
     const 未接 = !!(s && !s.接模型);
     const 选 = 私聊席 === 名;
@@ -387,19 +402,30 @@ async function 拉在座() {
     // 而这一栏的全部可信度正在于"每一句都是那一席协议里的原话"。
     // 名字后面那个「你」已经说清他是谁了。
     const 设 = 名 === '制作人' ? '' : ((s && s.人设) || '');
+    // 在答时第二行换成**它此刻在做什么**——那句话来自坐席自己报的 tool_use，
+    // 与屏上转圈处显示的是同一句（server.js 那边一个值发两处）。
+    // 它还没动手时只说「正在答话」，**不编一个具体的动作**。
+    const 在答 = !!(s && s.在答);
+    const 做 = 在答 ? ((s && s.做) || '正在答话…') : '';
     // 未接的席位不 disabled：**disabled 的按钮点了完全没有反应**，
     // 而"点了没反应"正是这轮巡礼在到处抓的那种病。它照常接点击，
     // 只是回答"我还没接模型"——名单里有它是事实，它说不了话也是事实，两句都要说出口。
-    return `<button class="座${选 ? ' 选' : ''}${未接 ? ' 未接' : ''}" data-seat="${esc(名)}"`
+    const 提示 = 未接 ? `${名}已登记但还没接模型，开不了私聊`
+      : (s && s.末话 ? 前(s.末话) : '');
+    return `<button class="座${选 ? ' 选' : ''}${未接 ? ' 未接' : ''}${在答 ? ' 在答' : ''}" data-seat="${esc(名)}"`
       + (名 === '制作人' ? ' disabled' : '')
-      + (未接 ? ` title="${esc(名)}已登记但还没接模型，开不了私聊"` : '')
+      + (提示 ? ` title="${esc(提示)}"` : '')
       + `>`
       + `<span class="座头 调${i % 4}">${esc(名.slice(0, 1))}<i class="座灯"></i></span>`
       + `<span class="座文">`
       + `<span class="座名">${esc(名)}${名 === '制作人' ? '<em>你</em>' : ''}${未接 ? '<em>未接模型</em>' : ''}</span>`
-      + (设 ? `<span class="座设">${esc(设)}</span>` : '')
+      + (在答 ? `<span class="座做">${esc(做)}</span>`
+        : (设 ? `<span class="座设">${esc(设)}</span>` : ''))
       + `</span></button>`;
   }).join('');
+  // 走 若变：这一栏 5 秒一拍，内容没变就一个字节都不碰 DOM（原则④「安静是默认」）。
+  // 直接 innerHTML= 的话，每 5 秒整栏重建一次——选区没了、hover 态断了、白耗电。
+  若变('座', 组, html);
 }
 
 function 换私聊(名) {
@@ -438,5 +464,8 @@ $('座组') && $('座组').addEventListener('click', (e) => {
 拉人闸(); 拉脉搏(); 拉凭据(); 拉额度(); 拉在座();
 setInterval(拉人闸, 20000);
 setInterval(拉脉搏, 10000);
+// 在座栏 5 秒一拍：它现在报的是「谁在答话、在做什么」，那是会在几十秒里变完的事。
+// 内容没变时 若变 一个字节都不碰 DOM，所以这个频率不违「安静是默认」。
+setInterval(拉在座, 5000);
 setInterval(拉凭据, 60000);
 setInterval(拉额度, 300000);

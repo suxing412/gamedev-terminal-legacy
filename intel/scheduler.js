@@ -14,7 +14,7 @@ const path = require('path');
 
 const 默认班次 = {
   抓取: ['07:10', '12:10', '22:10'],   // 待拍板①建议值：午间窗与晚间各覆盖一班
-  日报: ['08:20'],                      // 08:30 可读——09-01 之后通勤/晨间
+  日报: ['08:20'],                      // 08:30 可读——通勤/晨间那一段能读完
 };
 
 const 读 = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return d; } };

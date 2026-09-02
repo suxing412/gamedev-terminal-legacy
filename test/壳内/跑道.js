@@ -65,7 +65,13 @@ async function 跑() {
     width: 1600, height: 1000,
     minWidth: 窗最小[0], minHeight: 窗最小[1],
     show: false,                       // 不亮屏：这是判据不是演示
-    webPreferences: { contextIsolation: true, nodeIntegration: false },
+    // **挂真 preload**（2026-09-02）：在这之前跑道量的壳比真壳少一层，
+    // window.壳 恒为 undefined——任何「壳桥暴露了什么」的判据在这里都是恒真的，
+    // 而恒真的判据看起来和通过一模一样。半屏那三处里的壳桥就是这么差点漏掉的。
+    webPreferences: {
+      contextIsolation: true, nodeIntegration: false,
+      preload: path.join(__dirname, '..', '..', 'preload.js'),
+    },
   });
 
   // ── 一、先把「盲区声明」本身验掉 ──────────────────────────
@@ -89,14 +95,17 @@ async function 跑() {
   记('环境③ 布局是真的（body 宽 > 0）', 环境.体宽 > 0, '实得 ' + 环境.体宽);
   记('环境④ 三栏骨架是 grid', 环境.有布局 === 'grid', '实得 ' + 环境.有布局);
 
-  // ── 二、S18：半屏塔真的窄得下来 ───────────────────────────
-  // minWidth 会**静默钳位** setBounds。这条在浏览器里复现不了（浏览器没有 minWidth），
-  // 而它的后果是形态钮落在屏外、点不着、回不去全屏。
+  // ── 二、S18：松开 minWidth 之后窗真的窄得下来 ───────────────
+  // minWidth 会**静默钳位** setBounds，而这条在浏览器里复现不了（浏览器没有 minWidth）。
+  //
+  // 原案是半屏塔（钮落在屏外、点不着、回不去全屏）。半屏 2026-09-02 删除，
+  // 但这两条**没跟着撤**：J3 逐档量到 460/360，走的是同一次松开与装回。
+  // 静默钳位一旦回来，J3 那六档会在宽窗上假绿——那正是本仓栽过的那种绿。
   win.setBounds({ x: 100, y: 100, width: 1200, height: 800 });
-  win.setMinimumSize(360, 200);                 // main.js 进塔前做的正是这一步
+  win.setMinimumSize(360, 200);                 // J3 量窄档前做的正是这一步
   await 调宽(win, 460);
-  const 塔宽 = win.getBounds().width;
-  记('S18① 松开 minWidth 之后，setBounds(460) 真的生效', 塔宽 === 460, '实得 ' + 塔宽);
+  const 窄宽 = win.getBounds().width;
+  记('S18① 松开 minWidth 之后，setBounds(460) 真的生效', 窄宽 === 460, '实得 ' + 窄宽);
 
   win.setMinimumSize(窗最小[0], 窗最小[1]);      // 回全屏时装回去
   await 调宽(win, 460);
@@ -104,25 +113,43 @@ async function 跑() {
   记('S18② 装回 minWidth 之后它确实还在夹（证明上一条不是白测）',
     夹后 === 窗最小[0], '实得 ' + 夹后 + '，应为 ' + 窗最小[0]);
 
-  // 塔态下形态钮要落在窗内 —— 那是唯一的回程
-  win.setMinimumSize(360, 200);
-  await win.webContents.executeJavaScript(`document.querySelector('.台').classList.add('塔'); true`);
-  const 真宽 = await 调宽(win, 460);
-  const 钮 = await win.webContents.executeJavaScript(`(() => {
-    const b = document.getElementById('形态钮');
-    if (!b) return null;
-    const r = b.getBoundingClientRect();
-    return { 右: Math.round(r.right), 窗宽: window.innerWidth };
-  })()`);
-  // **先证明窗真的窄下来了**，否则「按钮在窗内」这句话是在宽窗上说的，等于没说
-  记('S18③a 渲染进程真的看见了窄下来的窗（不然下一条是在宽窗上测的）',
-    真宽 <= 470, '渲染进程量到 innerWidth=' + 真宽);
-  记('S18③b 塔态下形态钮落在窗内（它是唯一的回程）',
-    !!(钮 && 钮.右 <= 钮.窗宽), 钮 ? `右缘 ${钮.右} / 窗宽 ${钮.窗宽}` : '找不到形态钮');
-  await win.webContents.executeJavaScript(`document.querySelector('.台').classList.remove('塔'); true`);
-  win.setMinimumSize(窗最小[0], 窗最小[1]);
-  await 调宽(win, 1400);
 
+
+  // ── 二·五、S20：半屏塔真的删干净了（2026-09-02 制作人「没什么必要了」）──
+  //
+  // 撤掉一个功能不是删掉入口就算完。半屏散在**三个文件**里，
+  // 删一处不会让另外两处红，所以三处各判各的：
+  //   ① 按钮（index.html）——藏起来和删掉在屏上长得一样，藏起来的那颗还在接线上；
+  //   ② F9（app.js）——快捷键是另一处代码，删按钮带不走它。留下来就是一颗
+  //      按下去把 .台 加上一个**样式已经不存在**的「塔」类的暗雷：不报错，
+  //      屏上也不变，直到哪天有人给 .台.塔 补了样式，它就自己活过来了；
+  //   ③ 壳桥（preload.js + main.js）——window.壳.半屏 → ipcMain('形态:半屏')
+  //      是第三处。它留着就是一条没人用、却仍能把窗口钳到 360–460 的通道。
+  const 半屏残 = await win.webContents.executeJavaScript(`(async () => {
+    const 台 = document.querySelector('.台');
+    const 前类 = 台.className;
+    // 走真的 keydown 派发：app.js 那个监听挂在 document 上，
+    // 它在的时候这一发就会生效——所以这条判据能红。
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F9', bubbles: true }));
+    await new Promise((r) => setTimeout(r, 700));
+    return {
+      有钮: !!document.getElementById('形态钮'),
+      改了类: 台.className !== 前类,
+      塔类在: 台.classList.contains('塔'),
+      桥还在: !!(window.壳 && window.壳.半屏),
+    };
+  })()`);
+  await 等(500);
+  记('S20① 顶条上没有形态钮了', !半屏残.有钮);
+  记('S20② 按 F9 不再改 .台 的形态（快捷键与按钮是两处代码，要各删各的）',
+    !半屏残.改了类 && !半屏残.塔类在,
+    `类变了=${半屏残.改了类} 塔类=${半屏残.塔类在}`);
+  记('S20③ 壳桥不再暴露 半屏（preload 的暴露面是收窄了，不是留着没人用）',
+    !半屏残.桥还在);
+  // 第四处（main.js 那条把窗钳到 360–460 的 IPC）**不在这里判**：
+  // 跑道自己起主进程、自己建窗，从不加载 main.js——在这里写「窗宽没被钳走」
+  // 是一条恒真判据。写过一版，装回半屏之后它照样 ok，当场撤掉。
+  // 那一半归 test/壳接线.test.js 的 接①d（那个文件抬头就声明自己是源码守卫）。
   // ── 三、S17：一脏之后 Ctrl+R 与关窗还走不走得动 ──────────
   // beforeunload 命中后 Electron 问主进程 will-prevent-unload，没人接就默认拒绝：
   // 不弹框、不报错、页面连闪都不闪。这条在浏览器里也复现不了（Chrome 会弹原生确认）。
@@ -190,7 +217,7 @@ async function 跑() {
   // 改 id 不会让判据静默失效，删掉 data-问 才会，那是有意的。
   const 量顶条 = () => win.webContents.executeJavaScript(`(() => {
     const q = (s) => document.querySelector(s);
-    const 顶 = q('.顶'); const 况 = q('.顶况'); const 钮 = q('#形态钮');
+    const 顶 = q('.顶'); const 况 = q('.顶况');
     if (!顶 || !况) return { 有: false };
     const 可见 = (el) => {
       if (!el) return null;
@@ -204,7 +231,7 @@ async function 跑() {
       有: true, 窗: window.innerWidth,
       顶溢: 顶.scrollWidth - 顶.clientWidth,
       况溢: 况.scrollWidth - 况.clientWidth,
-      三问, 钮: 可见(钮),
+      三问,
       // 年龄章绝不许被截掉：它是原则三「逾期会变重」的唯一载体
       章: (() => { const c = q('.闸章'); if (!c) return null;
         const r = c.getBoundingClientRect(); return { 宽: Math.round(r.width), 右: Math.round(r.right) }; })(),
@@ -228,31 +255,15 @@ async function 跑() {
       记(`J3@${目标} 三问·${名} 有一个真可见的元素且落在窗内`,
         !!(v && v.显 && v.右 <= m.窗 + 1), v ? `宽 ${v.宽} 右缘 ${v.右} / 窗 ${m.窗}` : '找不到 [data-问]');
     }
-    记(`J3@${目标} 形态钮落在窗内（塔态下它是唯一的回程）`,
-      !!(m.有 && m.钮 && m.钮.显 && m.钮.右 <= m.窗 + 1),
-      m.钮 ? `右缘 ${m.钮.右} / 窗 ${m.窗}` : '找不到形态钮');
     if (m.有 && m.章) {
       记(`J3@${目标} 年龄章没被截掉（它是"逾期会变重"的唯一载体）`,
         m.章.宽 > 0 && m.章.右 <= m.窗 + 1, `宽 ${m.章.宽} 右缘 ${m.章.右} / 窗 ${m.窗}`);
     }
   }
 
-  // 塔态单独量一遍：main.js 把塔宽钳在 360–460，而**塔态永远 ≤820**，
-  // 原来那两条 :not() 白名单求交只剩一个钟——三问一条都答不了，且那是常态不是边角。
-  win.setMinimumSize(360, 200);
-  await win.webContents.executeJavaScript(`document.querySelector('.台').classList.add('塔'); true`);
-  const 塔宽实 = await 调宽(win, 420);
-  const 塔 = await 量顶条();
-  记('J3·塔 渲染进程真的看见了塔宽（不然下面几条是在宽窗上测的）', 塔宽实 <= 470, '实得 ' + 塔宽实);
-  记('J3·塔 顶条不横向溢出', 塔.有 && 塔.顶溢 <= 0, 塔.有 ? `溢出 ${塔.顶溢}px` : '');
-  for (const [k, 名] of [['活', '活着没有'], ['跑', '在跑什么'], ['等', '谁在等我']]) {
-    const v = 塔.有 && 塔.三问[k];
-    记(`J3·塔 三问·${名} 在塔态仍然可见`, !!(v && v.显 && v.右 <= 塔.窗 + 1),
-      v ? `宽 ${v.宽} 右缘 ${v.右} / 窗 ${塔.窗}` : '找不到 [data-问]');
-  }
-  记('J3·塔 形态钮仍在窗内', !!(塔.钮 && 塔.钮.显 && 塔.钮.右 <= 塔.窗 + 1),
-    塔.钮 ? `右缘 ${塔.钮.右} / 窗 ${塔.窗}` : '');
-  await win.webContents.executeJavaScript(`document.querySelector('.台').classList.remove('塔'); true`);
+  // J3 那六档把窗留在 360 且 minWidth 松着。**下面每一条判据都在这个窗上跑**，
+  // 所以这里必须装回去再拉宽——漏掉这一步不会报错，只会让后面的判据在窄窗上说话。
+  // （J3·塔 四条随半屏一起撤销，2026-09-02；这两行还原动作不是它的，留着。）
   win.setMinimumSize(窗最小[0], 窗最小[1]);
   await 调宽(win, 1400);
 
@@ -290,7 +301,6 @@ async function 跑() {
       产: 产 ? 产.textContent : null,
       闸: 闸 ? 闸.textContent : null,
       // 顶层脚本若在中途抛掉，后面这些接线就没绑上——用它当"整份脚本跑完了"的凭据
-      有形态钮接线: !!document.getElementById('形态钮'),
       座位画了: !!document.querySelector('.座'),
     };
   })()`);
@@ -383,44 +393,6 @@ async function 跑() {
   await win.loadURL(`http://127.0.0.1:${port}/`);
   await 等(400);
 
-  // ── 四·九、J7：塔态钉在「等你拍板」页，且回全屏能还原 ──────────
-  //
-  // 拆栏之前塔＝只留闸栏、藏掉对话。闸栏搬走之后，塔如果还停在对话页，
-  // 屏上就是一条 360px 宽的**空对话**——而形态记在 localStorage 里，
-  // 于是开机直接进那个空屏。这条判据要挡的正是「塔是空的」。
-  //
-  // 顺带挡另一半：回全屏要还原进塔之前那一页。塔是临时形态，
-  // 不该改变你本来在看什么——按一下 F9 再按回来，页面换了，那是一种很闷的坏。
-  await win.loadURL(`http://127.0.0.1:${port}/?v=watch`);
-  await 等(3000);
-  const 塔况 = await win.webContents.executeJavaScript(`(async () => {
-    const 台 = document.querySelector('.台');
-    const 页 = () => {
-      const a = document.querySelector('.去 a.在');
-      return a ? a.getAttribute('data-jian') : null;
-    };
-    const 进前 = 页();
-    document.getElementById('形态钮').click();
-    await new Promise((r) => setTimeout(r, 2200));
-    const 塔上 = 页();
-    const 塔里有内容 = (() => {
-      const v = document.getElementById('视图区');
-      if (!v || v.hidden) return false;
-      return v.getBoundingClientRect().height > 40 && !!v.querySelector('#闸页');
-    })();
-    document.getElementById('形态钮').click();
-    await new Promise((r) => setTimeout(r, 2200));
-    const 回来 = 页();
-    return { 进前, 塔上, 塔里有内容, 回来, 还在塔: 台.classList.contains('塔') };
-  })()`);
-  记('J7① 进塔之后停在「等你拍板」页（不是空对话）',
-    塔况.塔上 === 'gate', `进塔前 ${塔况.进前} → 塔上 ${塔况.塔上}`);
-  记('J7② 塔里那一页真的有内容（视图区有高度且装着闸页）', 塔况.塔里有内容);
-  记('J7③ 回全屏还原进塔之前那一页（塔是临时形态，不该改变你在看什么）',
-    塔况.回来 === 塔况.进前, `进塔前 ${塔况.进前} → 回来 ${塔况.回来}`);
-  记('J7④ 两次点击之后确实回到了全屏', !塔况.还在塔);
-  await win.loadURL(`http://127.0.0.1:${port}/`);
-  await 等(400);
 
   // ── 四·十、J8：在座栏只在对话页出现，且说的是真数据 ──────────
   //
@@ -520,6 +492,74 @@ async function 跑() {
   记('S16① 全局没有把 scrollbar-width 设成 thin（那会关掉整族 ::-webkit-scrollbar）',
     滚.宽 !== 'thin', '实得 ' + 滚.宽);
 
+
+  // ── 四·十、J10：正文列在**宽屏**上要撑满外壳（2026-09-02 现场故障）──────
+  //
+  // 案：制作人屏上 .话栏 塌成 400px，右边两千像素全黑。查出来是拆栏时
+  // 漏删的 `@media (min-width: 2200px) { .台 { grid-template-columns: 400px 1fr 400px } }`
+  // ——那两侧本来给的是「等你拍板」与「产线脉搏」两根 <aside>，aside 删了，轨没删。
+  // .话栏 于是掉进第一条 400px 轨里，另外两条轨空着。
+  //
+  // **95 条壳内判据一条都没拦住它，原因有二，两条都要堵：**
+  //   ① J3 逐档量到 1600 就停了，而断点在 2200——测了六档也照不到；
+  //   ② J3 只量顶条，从不量正文列宽。顶条 grid-column:1/-1 横跨全部轨，
+  //      所以三列布局下它照样满宽、照样不溢出，**顶条全绿而正文已经塌了**。
+  //
+  // 宽度不许靠「跑判据这台机器的屏够宽」——那样换台小屏就静默变成未验。
+  // 屏不够宽时用 zoomFactor 把 CSS 视口撑到目标宽度：媒体查询按 CSS px 判，
+  // 走的是同一条码路，不是模拟。
+  async function 宽到CSS(目标) {
+    win.webContents.setZoomFactor(1);
+    win.setMinimumSize(窗最小[0], 窗最小[1]);
+    const 真 = await 调宽(win, 目标);
+    if (Math.abs(真 - 目标) <= 40) return { 宽: 真, 法: 'setBounds' };
+    const 物 = await 调宽(win, Math.min(目标, 1400));
+    win.webContents.setZoomFactor(物 / 目标);
+    for (let i = 0; i < 40; i++) {
+      const 见 = await win.webContents.executeJavaScript('window.innerWidth');
+      if (Math.abs(见 - 目标) <= 40) return { 宽: 见, 法: 'zoom' };
+      await 等(50);
+    }
+    return { 宽: await win.webContents.executeJavaScript('window.innerWidth'), 法: 'zoom·未达' };
+  }
+
+  const 量正文 = () => win.webContents.executeJavaScript(`(() => {
+    const 台 = document.querySelector('.台'); const 栏 = document.querySelector('.话栏');
+    if (!台 || !栏) return { 有: false };
+    const 列 = getComputedStyle(台).gridTemplateColumns;
+    const a = 台.getBoundingClientRect(); const b = 栏.getBoundingClientRect();
+    return { 有: true, 窗: window.innerWidth,
+      台宽: Math.round(a.width), 栏宽: Math.round(b.width), 栏左: Math.round(b.left - a.left),
+      列, 轨数: 列.trim() === 'none' ? 0 : 列.trim().split(" ").length };
+  })()`);
+
+  const 验正文 = (标, m, 法) => {
+    if (!m.有) { 记(`J10@${标} 找得到 .台 与 .话栏`, false, ''); return; }
+    记(`J10@${标} .台 只有一条正文列轨（拆栏之后不该再有第二条）`,
+      m.轨数 === 1, `实得 ${m.轨数} 条：${m.列}   [${法} 窗${m.窗}]`);
+    记(`J10@${标} .话栏 撑满 .台，且贴在左缘`,
+      Math.abs(m.栏宽 - m.台宽) <= 2 && Math.abs(m.栏左) <= 1,
+      `台${m.台宽} 栏${m.栏宽} 左偏${m.栏左}   [${法} 窗${m.窗}]`);
+  };
+
+  for (const 目标 of [1600, 2200, 2600]) {
+    const r = await 宽到CSS(目标);
+    // 达不到也要量：zoom 兜底之后仍达不到才算未验，且必须明说
+    if (r.法 === 'zoom·未达') {
+      记(`J10@${目标} 这一档撑不到（实得 ${r.宽}）——本档未验`, true, '未验，非通过');
+      continue;
+    }
+    验正文(目标, await 量正文(), r.法);
+  }
+
+  // 最大化单独走一遍：制作人现场就是最大化触发的，而 setBounds 与 maximize
+  // 在 Chromium 里不是同一条重排路径——前者过 resize，后者过窗口状态变更。
+  win.webContents.setZoomFactor(1);
+  win.maximize();
+  await 等(1200);
+  验正文('最大化', await 量正文(), 'maximize');
+  win.unmaximize();
+  await 等(400);
   win.destroy();
   return 结;
 }

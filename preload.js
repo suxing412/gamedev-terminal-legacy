@@ -6,7 +6,5 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('壳', {
-  // true = 半屏塔（贴右侧竖条），false = 全屏工作台
-  半屏: (开) => ipcRenderer.send('形态:半屏', !!开),
   在壳里: true,
 });

@@ -4,8 +4,13 @@
 //
 //   · 「机制成不成立」由 `test/壳内/跑道.js` 在真 Electron 里验
 //     （setMinimumSize 之后 setBounds 生不生效、will-prevent-unload 拦不拦得住
-//      而重载仍然完成、窄窗下形态钮落不落在窗内）。那条跑道自证过能红：
-//      把「进塔前松开 minWidth」去掉，S18① 当场变 not ok、退出码 1。
+//      而重载仍然完成）。那条跑道自证过能红：把「松开 minWidth」去掉，
+//      S18① 当场变 not ok、退出码 1。
+//
+//   · 接① / 接①b（半屏塔进出时松开与装回 minWidth）**已随半屏一起撤销**
+//     ——2026-09-02 制作人拍板删除半屏。它们守的那段 IPC 不再存在，
+//     再留着就是两条恒真的守卫。接①c 与接④ 没跟着撤：窗最小 这个常量还在，
+//     而 S18①② 仍然要靠它量窄档。
 //   · 「main.js 有没有用上那个机制」由这里守。要在真壳里验这一半，
 //     得把整个 app 拉起来再驱动 IPC——那比它守住的东西贵得多。
 //
@@ -18,25 +23,6 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const 源 = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
-
-test('接① **进半屏塔之前松开 minWidth**（否则 setBounds(460) 被静默钳到 1100）', () => {
-  const i = 源.indexOf("ipcMain.on('形态:半屏'");
-  assert.ok(i > 0, '找不到形态切换的 IPC');
-  const 段 = 源.slice(i, 源.indexOf('});', 源.indexOf('win.maximize()', i)));
-  const 松 = 段.indexOf('win.setMinimumSize(360, 200)');
-  const 定 = 段.indexOf('win.setBounds(');
-  assert.ok(松 > 0, '进塔前没有松开 minWidth —— 半屏塔从来就没窄过');
-  assert.ok(松 < 定, '松开 minWidth 写在 setBounds 之后了，那等于没松');
-});
-
-test('接①b 回全屏时把 minWidth 装回去（不然三栏能被拖成 360 宽）', () => {
-  const i = 源.indexOf("ipcMain.on('形态:半屏'");
-  const 段 = 源.slice(i, i + 1600);
-  const j = 段.indexOf('} else {');
-  assert.ok(j > 0, '找不到回全屏那一支');
-  assert.match(段.slice(j), /setMinimumSize\(窗最小\[0\], 窗最小\[1\]\)/,
-    '回全屏没把 minWidth 装回去');
-});
 
 test('接①c 最小尺寸只此一处（两处各写一个数，就一定会有一天只改了一个）', () => {
   assert.match(源, /const 窗最小 = \[\d+, \d+\]/, 'main.js 里没有 窗最小 这个常量');
@@ -75,4 +61,16 @@ test('接④ 跑道与 main.js 同源取 窗最小（跑道里不许再抄一个
   const 跑 = fs.readFileSync(path.join(__dirname, '壳内', '跑道.js'), 'utf8');
   assert.match(跑, /main\.js[\s\S]{0,200}const 窗最小 = \\\[\(\\d\+\), \(\\d\+\)\\\]/,
     '跑道没有从 main.js 读 窗最小');
+});
+
+// ── 接①d：半屏塔那条 IPC 通道真的断了（2026-09-02）─────────────────
+//
+// 这一条**只能在这里**：跑道.js 自己起主进程、自己建窗，从不加载 main.js，
+// 所以「按 F9 窗宽没被钳走」在那边是恒真的（写过一版，装回半屏之后照样 ok）。
+// 通道在不在，是 main.js 的源码事实——正是本文件抬头声明的那一半。
+test('接①d main.js 不再监听 形态:半屏（半屏 2026-09-02 删除，通道要一起断）', () => {
+  assert.ok(!/ipcMain\.on\(['"]形态:半屏['"]/.test(源),
+    'main.js 仍在监听 形态:半屏 —— 前端入口删了，这条能把窗口钳到 360 的通道还开着');
+  assert.ok(!/setMinimumSize\(360/.test(源),
+    'main.js 里还有 setMinimumSize(360…) —— 窗口最小尺寸只该由 窗最小 那一处定');
 });

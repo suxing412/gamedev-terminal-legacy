@@ -79,14 +79,13 @@ body {
  * read.css:40 的独立页导航早就是 `grid-auto-flow:column`；同一个东西两种写法，
  * 这次归一到定轨：轨宽写死，124 怎么算都不会把某一格挤没。
  *
- * 三条轨：读数区 / 页签 / 空。形态钮落在第三轨末端，**任何断点不隐藏**——
- * 塔态下 `.去` 是藏的，它是唯一的回程（S18③b 在盯这条）。
+ * 两条轨：读数区 / 页签。半屏塔已于 2026-09-02 删除，第三轨（形态钮）随之撤掉。
  */
 .顶 {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: minmax(0, auto) max-content 1fr;
-  grid-template-areas: "读 签 钮";
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  grid-template-areas: "读 签";
   align-items: center;
   gap: var(--s5);
   padding: 0 var(--s5);
@@ -96,15 +95,15 @@ body {
 }
 .顶况 { grid-area: 读; }
 .去 { grid-area: 签; }
-#形态钮 { grid-area: 钮; justify-self: end; }
 
-/* 单行下界实算：48(padding) + 462(读数) + 24 + 464(八页签) + 24 + 43.3(钮) = 1089.3。
-   切换点定在 1280 而不是压到 1100——1089.3 在 1100 上只余 10.7px，
-   而这些宽度读数出自 Chrome 不是壳内 Chromium 124（判据 J3 才是那道保险）。 */
+/* 单行下界实算：48(padding) + 462(读数) + 24 + 464(八页签) = 998。
+   形态钮删除（2026-09-02）后这里少了 24+43.3，下界从 1089.3 降到 998。
+   切换点仍留在 1280 不往下压：这些宽度读数出自 Chrome 不是壳内 Chromium 124，
+   那点富余是留给 124 的（判据 J3 才是那道保险）。 */
 @media (max-width: 1279.98px) {
   .顶 {
-    grid-template-columns: minmax(0, 1fr) max-content;
-    grid-template-areas: "读 钮" "签 签";
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "读" "签";
     row-gap: var(--s2);
     padding-block: var(--s2);
   }
@@ -375,65 +374,6 @@ body {
   * { animation: none !important; transition: none !important; }
 }
 
-/* ══ 半屏塔形态（需求定案 Q4/Q8）══
- *
- * 半屏不是「窗口变窄」，是换一件事做：全屏工作台是**坐下来干活**，半屏塔是**余光扫一眼**。
- * 所以它不是三栏压缩版——对话与流水整个收起，只留「谁在等我」和「产线活着没有」。
- * 余光能读的信息量很小，多留一样都是让它变得需要专注去看，那就失去了半屏的意义。
- *
- * 情报塔那一半（定案里的首期 M1）还没建。建好之后它落在这个形态里，
- * 与人闸并列——现在先把骨架和切换立住，不假装已经有了。
- */
-.形态钮 {
-  margin-left: var(--s3);
-  padding: 3px 10px; border-radius: 4px;
-  border: 1px solid var(--line); background: var(--raised);
-  color: var(--ink-2); font: inherit; font-size: 11px; cursor: pointer;
-}
-.形态钮:hover { border-color: var(--gate); color: var(--ink); }
-
-.台.塔 { grid-template-columns: minmax(0, 1fr); }
-/* ── 塔态：从「三栏的塔」改成「单栏的窄队列」（2026-09-02 拆栏）──
- *
- * 拆栏之前，塔＝只留 .闸栏、藏掉 .话栏 与 .脉栏。**闸栏搬走之后那条规则会要命**：
- * .话栏 变成唯一的内容容器，再藏它，塔就只剩顶条 + 98.5% 空白，
- * 而 app.js 的 localStorage['终端.形态'] 会让程序**开机直接进那个空屏**。
- *
- * 上面那段「塔态点页签是静止的活人」的老注释，前提正是 `.话栏 display:none`——
- * 前提没了，结论也没了。所以现在 .话栏 留着，塔＝一条窄队列：
- * 视图区钉在「等你拍板」页（换形态时由 app.js 切，回全屏恢复上次页签）。
- *
- * 页签仍然收：460px 排不下八个。座条与说区也收——塔的取向是「余光扫一眼」，
- * 要说话就按形态钮回全屏，那才是这个模式的正当走法。
- */
-.台.塔 .去 { display: none; }
-.台.塔 .座条, .台.塔 .说区 { display: none; }
-/* 窄队列：五列压成三列，闸位与归属让出去（组头里已经说过一遍） */
-.台.塔 .闸页头 { padding: var(--s3) var(--s4) var(--s2); flex-wrap: wrap; row-gap: var(--s2); }
-.台.塔 .闸页头 h1 { font-size: 15px; }
-.台.塔 .闸组头 { padding: var(--s2) var(--s4); }
-.台.塔 .闸行 { grid-template-columns: 80px minmax(0, 1fr) 62px; padding: var(--s2) var(--s4); gap: var(--s3); }
-.台.塔 .闸谁, .台.塔 .闸位, .台.塔 .组量 { display: none; }
-.台.塔 .闸题 { font-size: 12px; }
-/* 塔态顶条：**换行，不藏格**。
- *
- * 原来这里是 `.顶况 > span:not(#顶凭):not(#顶钟){display:none}`，
- * 和 820px 那条 `:not(#顶闸格):not(#顶钟)` 求交只剩 `#顶钟`——
- * 而 main.js 把塔宽钳在 360–460，**塔态永远 ≤820**，两条同时生效。
- * 于是塔态下屏上只剩一个钟：三问一条都答不了，且那是塔的常态不是边角。
- * 正列表纪律（2026-09-02 评审）：三问那三个元素在任何断点都不许 display:none，
- * 只许换行与截断。
- *
- * 塔态两行：`● 24验收 · 1定夺 · 11解除停靠 [14天]` ＝ 249.4px（360 内容宽 312 ✓）
- *          `在跑 3 · TK-201 卡 4°12′` ＋ 形态钮 ＝ 232.9px ✓
- */
-.台.塔 .顶 { grid-template-areas: "读 钮"; grid-template-columns: minmax(0, 1fr) max-content; }
-.台.塔 .顶况 { grid-template-columns: 6px minmax(0, 1fr); grid-auto-flow: row; gap: 4px 12px; }
-.台.塔 .顶产 { grid-column: 1 / -1; }
-/* `.塔况` 随 .闸栏 一起删了（它长在那一栏里）。
-   它报的「在途 N · 在跑 N · 待派 N」**已被顶条产线格完整吸收**——
-   这条迁移动作要显式记着：漏掉它会静默断掉塔态那条降级路。 */
-
 /* ── 窄屏兜底 ──────────────────────────────────────────
  * 拆栏之后 .台 是单栏，所以原来那三段（1600 收右栏、1100 收成两栏、820 收成一栏）
  * 全部不再需要——**它们兜的是三栏挤成负数**，而现在没有三栏了。
@@ -447,19 +387,13 @@ body {
 }
 
 /* 读数区单行装不下时**换行**（正列表纪律：三问不许 display:none）。
-   门槛实算：48(padding) + 462(读数三轨含间隙) + 24 + 43.3(钮) = 577.3。
-   **这条是 J3 在壳里当场抓出来的**：塔态早就换行了，而非塔态的窄屏漏了同一条——
-   460px 下读数区溢出 143px，「在跑什么」那一格整个在窗外。
-   塔态永远 ≤460，所以两条规则形状相同，但**触发条件不同**，不能靠塔态那条兜。 */
+   门槛实算：48(padding) + 462(读数三轨含间隙) = 510（形态钮删除后不再占 24+43.3）。
+   **这条是 J3 在壳里当场抓出来的**：460px 下读数区溢出 143px，
+   「在跑什么」那一格整个在窗外。断点留在 640 不动——510 是下界不是切换点，
+   宽度读数出自 Chrome，富余留给壳内 Chromium 124。 */
 @media (max-width: 640px) {
   .顶况 { grid-template-columns: 6px minmax(0, 1fr); grid-auto-flow: row; gap: 4px 12px; }
   .顶产 { grid-column: 1 / -1; }
-}
-
-/* 2K/4K 常驻屏：中栏的阅读列宽度是定的（汉字读起来 72ch 就够），多出来的横向空间
-   给两侧——闸题不再折行，流水句能整句看完。这是密度的正当用法，不是把字撑大。 */
-@media (min-width: 2200px) {
-  .台 { grid-template-columns: 400px minmax(0, 1fr) 400px; }
 }
 
 /* 在答态（2026-09-02 批六）：这一席此刻有一条 /api/say 在跑。

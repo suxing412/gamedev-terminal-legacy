@@ -1,6 +1,6 @@
 {
   "name": "gamedev-terminal",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "private": true,
   "description": "游戏开发者终端 · 全屏常驻坐席",
   "main": "main.js",

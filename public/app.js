@@ -236,7 +236,6 @@ const 框 = $('说框');
 document.addEventListener('keydown', (e) => {
   if (e.target === 框) { if (e.key === 'Escape') { 框.value = ''; 框.blur(); } return; }
   if (e.key === '/') { e.preventDefault(); 框.focus(); }
-  else if (e.key === 'F9') { e.preventDefault(); 换形态(!document.querySelector('.台').classList.contains('塔')); }
   // 数字键 1–9「选左栏第 N 条」**随左栏一起删了**（2026-09-02 拆栏）。
   // 那一栏现在是 /gate 独立页，而在那一页上「第 N 条」这个说法不成立：
   // 页面一屏能装几十条，1–9 覆盖不到，留着就是一条只在前九条上生效的快捷键——
@@ -301,26 +300,6 @@ $('凭抄').addEventListener('click', async () => {
   setTimeout(() => { $('凭抄').textContent = '复制'; }, 2000);
 });
 
-// ---- 形态：半屏塔 ⟷ 全屏工作台（需求定案 Q4/Q8）----
-// 选择记在 localStorage：值班屏重开一次就得重新摆一次形态，是很烦的那种烦。
-const 塔键 = '终端.形态';
-function 换形态(要塔, 记 = true) {
-  document.querySelector('.台').classList.toggle('塔', 要塔);
-  $('形态钮').textContent = 要塔 ? '全屏' : '半屏';
-  if (记) { try { localStorage.setItem(塔键, 要塔 ? '塔' : '台'); } catch { /* 无痕模式就不记 */ } }
-  // 塔态钉在「等你拍板」页，回全屏恢复上次那一页（2026-09-02 拆栏）。
-  //
-  // **不这么做塔就是空的。** 拆栏之前塔＝只留闸栏、藏掉对话；闸栏搬走之后
-  // 塔如果还停在对话页，屏上就是一条 360px 宽的空对话——而 localStorage 里的
-  // 形态是会记住的，于是开机直接进那个空屏。
-  // 由 视图.js 接这个事件（它才知道当前是哪一页、怎么换）。
-  document.dispatchEvent(new CustomEvent('形态换', { detail: { 塔: !!要塔 } }));
-  // 在壳里才改窗形；浏览器里只换版式，不折腾窗口
-  if (window.壳 && window.壳.半屏) window.壳.半屏(要塔);
-}
-$('形态钮').addEventListener('click', () => 换形态(!document.querySelector('.台').classList.contains('塔')));
-try { if (localStorage.getItem(塔键) === '塔') 换形态(true, false); } catch { /* 读不到就用默认全屏 */ }
-
 // ---- 陈旧哨：钟的替代品（2026-09-02 评审）----
 //
 // **钟删了**：只有 HH:MM 没有日期、是本机钟不与监制台对表、
@@ -353,7 +332,7 @@ setInterval(查陈旧, 15000);
 let 私聊席 = null;
 let 席况 = new Map();   // 名 → 接模型，点击时要用它判断这一位说不说得了话
 
-const 群说注 = 'Enter 发送 · Shift+Enter 换行 · @ 点名 · / 聚焦 · F9 半屏塔';
+const 群说注 = 'Enter 发送 · Shift+Enter 换行 · @ 点名 · / 聚焦';
 
 async function 拉在座() {
   const 组 = $('座组');

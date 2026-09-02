@@ -12,7 +12,7 @@ const path = require('path');
 // 08-30 就这么把制作人的 Esc 吞了一整天（详见 createWindow 里那段）。
 // 要局部快捷键走 webContents 的 before-input-event；想用 globalShortcut 得先把它加回这一行，
 // 那时请先回答：这个键值得从整台机器上抢走吗？
-const { app, BrowserWindow, shell, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, shell } = require('electron');
 
 // ---- 登录自启的命令行口（--install / --uninstall / --autostart-status）----
 // 在 Electron 起窗之前处理：这三个是一次性命令，不该顺带开一个窗。
@@ -73,8 +73,8 @@ const start = (...a) => require('./server').start(...a);
 
 let win = null;
 let 端口 = null;
-// 全屏工作台的最小尺寸。**只此一处**——半屏塔要临时松开它再装回去，
-// 两处各写一个数就一定会有一天只改了一个。
+// 窗口最小尺寸。半屏塔删除（2026-09-02）后再没有第二处会动它，
+// 但判据 J10 仍要临时松开它才能量到窄档，所以「只此一处」这条纪律留着。
 const 窗最小 = [1100, 640];
 
 async function createWindow() {
@@ -129,35 +129,6 @@ async function createWindow() {
     }
   });
 
-  // 形态切换（需求定案 Q4/Q8：半屏情报塔 ⟷ 全屏工作台，与 Unity/浏览器共存）。
-  // 半屏不是「窗口变窄」而是**贴屏右缘的一根竖条**：它要能和 Unity 并排而不互相盖，
-  // 所以走 workArea 定位（避开任务栏），并置顶——不置顶的话点一下 Unity 它就沉下去，
-  // 那就不叫常驻了。全屏态不置顶，免得挡住别的窗。
-  ipcMain.removeAllListeners('形态:半屏');
-  ipcMain.on('形态:半屏', (e, 开) => {
-    if (!win) return;
-    const wa = screen.getPrimaryDisplay().workArea;
-    if (开) {
-      if (win.isFullScreen()) win.setFullScreen(false);
-      if (win.isMaximized()) win.unmaximize();
-      // **先松开 minWidth，再 setBounds。**
-      //
-      // minWidth: 1100 会**静默钳位** setBounds——半屏塔从来就没窄过。
-      // 实测（2026-08-31）：窗口成了宽 1100、右边 640px 挂在屏幕外、且置顶；
-      // 页面按 1086px 排版，特意保留的 #顶闸格 / #顶钟 落在 x 878/947 全在屏外，
-      // 形态钮落在 x 1018 —— **点不着，回不去全屏**。全链条零报错，
-      // 而浏览器预览复现不了（浏览器没有 minWidth）。
-      // style.css 里那段「塔态收起页签导航」的全部理由，也押在这个从未生效的形态上。
-      win.setMinimumSize(360, 200);
-      const w = Math.max(360, Math.min(460, Math.round(wa.width * 0.22)));
-      win.setBounds({ x: wa.x + wa.width - w, y: wa.y, width: w, height: wa.height });
-      win.setAlwaysOnTop(true, 'normal');
-    } else {
-      win.setAlwaysOnTop(false);
-      win.setMinimumSize(窗最小[0], 窗最小[1]);   // 回全屏，把三栏的下限装回去
-      win.maximize();
-    }
-  });
 
   // **接住 will-prevent-unload。**
   //

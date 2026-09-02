@@ -16,6 +16,7 @@
      **<link> 是被丢掉的**，所以视图的样式表必须在这里预载。漏了不报错、不白屏，
      只是那一页在壳里长得跟没写样式一样——而独立打开它又是好的，最难对上号的一种。 -->
 <link rel="stylesheet" href="人闸.css">
+<link rel="stylesheet" href="席位.css">
 <link rel="stylesheet" href="watch.css">
 <link rel="stylesheet" href="班次.css">
 <link rel="stylesheet" href="存照.css">
@@ -146,6 +147,9 @@
         <span class="座数" id="座数">—</span>
       </div>
       <div class="座列" id="座组"></div>
+      <!-- 去席位页。**它有地方可去才放出来**（批六之前这里是空的）——
+           一个点了没反应的入口，比没有那个入口坏。 -->
+      <a class="座去席位" href="/seats">＋ 自定义席位<span>协议存文稿台，在那儿改</span></a>
     </aside>
 
     <!-- 视图区：与话流互斥，占同一格。

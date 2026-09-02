@@ -476,3 +476,16 @@ body {
 /* 只有这一处会持续动，而它表示的正是「此刻真的有东西在跑」——
    PRODUCT 原则④「安静是默认，动是信号」：动的时候确实是个信号。 */
 @keyframes 座答 { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+/* 在座栏底下去席位页的入口（2026-09-02 批六）。
+   虚线框＝「这里还能加东西」，与实心的席位行分得开。 */
+.座去席位 {
+  display: flex; flex-direction: column; gap: 2px;
+  margin: var(--s3) var(--s4) var(--s4);
+  padding: var(--s3);
+  border: 1px dashed var(--line); border-radius: 6px;
+  color: var(--ink-2); font-size: 12px; text-align: center; text-decoration: none;
+  flex: none;
+}
+.座去席位:hover { border-color: var(--gate-deep); color: var(--ink); }
+.座去席位 span { font-size: 10.5px; color: var(--ink-3); }

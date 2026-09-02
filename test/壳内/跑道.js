@@ -463,6 +463,55 @@ async function 跑() {
   await win.loadURL(`http://127.0.0.1:${port}/`);
   await 等(400);
 
+  // ── 四·十一、J9：席位页在壳里装得起来，且入口不是死钮 ──────────
+  //
+  // 制作人：「智能体协议就按照文档库里的，可以直接在自定义中跳转到文档库中开编辑器进行编辑」。
+  // 所以这一页的价值全在那个跳转上——**跳不过去，这一页就只是一张说明书**。
+  // 另一半盯的是在座栏底下那个「＋ 自定义席位」：批六之前它没有地方可去，
+  // 所以当时没放；现在放了，就得证明它真的到得了。
+  await win.loadURL(`http://127.0.0.1:${port}/?v=seats`);
+  await 等(2500);
+  const 席 = await win.webContents.executeJavaScript(`(() => {
+    const q = (s) => document.querySelector(s);
+    const 页 = q('#视图区 .席页');
+    if (!页) return { 有: false };
+    const 项 = [...document.querySelectorAll('.席项')];
+    // 样式有没有真的挂上（片段模式丢 <link>，漏预载那一页在壳里就是裸的）
+    const 表 = q('.席表');
+    const 有样式 = !!表 && getComputedStyle(表).borderRightWidth !== '0px';
+    return {
+      有: true, 席数: 项.length, 有样式,
+      共守在: !!q('.席共守'),
+      建钮: !!q('.席建钮'),
+      // 详情里那个「在文稿台编辑」——内建席位是灰的，自建席位才是真链接
+      改链: [...document.querySelectorAll('a.席改')].map((a) => a.getAttribute('href')),
+    };
+  })()`);
+  记('J9① 席位页在壳里装得起来', 席.有);
+  记('J9② 席表画出了席位', 席.有 && 席.席数 >= 7, (席.席数 || 0) + ' 席');
+  记('J9③ 席位.css 挂进了预载（漏了这一页在壳里是裸的，而独立打开又是好的）',
+    席.有 && 席.有样式, 席.有样式 ? '边框在' : '.席表 没有右边框 —— 样式没挂上');
+  记('J9④ 共守段单独摆出来（混进本席协议里，人会以为改它只影响这一席）', 席.有 && 席.共守在);
+  记('J9⑤ 有新建入口', 席.有 && 席.建钮);
+
+  // 在座栏那个「＋ 自定义席位」真的到得了席位页
+  await win.loadURL(`http://127.0.0.1:${port}/`);
+  await 等(2500);
+  const 入 = await win.webContents.executeJavaScript(`(async () => {
+    const a = document.querySelector('.座去席位');
+    if (!a) return { 有钮: false };
+    a.click();
+    await new Promise((r) => setTimeout(r, 2500));
+    return { 有钮: true, 到了: !!document.querySelector('#视图区 .席页'),
+             还在壳里: !!document.querySelector('.台') };
+  })()`);
+  记('J9⑥ 在座栏底下有「＋ 自定义席位」', 入.有钮);
+  记('J9⑦ **点它真的到得了席位页**（批六之前它没地方可去，所以当时没放）',
+    入.有钮 && 入.到了, 入.到了 ? '到了' : '点了没反应');
+  记('J9⑧ 而且没跳出壳（顶条三格还在）', !!入.还在壳里);
+  await win.loadURL(`http://127.0.0.1:${port}/`);
+  await 等(400);
+
   // ── 五、滚动条：S16 那条 `*` 的真凶验证 ────────────────────
   const 滚 = await win.webContents.executeJavaScript(`(() => {
     const cs = getComputedStyle(document.documentElement);

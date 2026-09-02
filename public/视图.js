@@ -161,11 +161,18 @@
     换视图(a.dataset.jian, true);
   });
 
-  // 视图**内部**的链接也要拦：班次页的「看报告」、日报的翻页都在片段里。
-  // 不拦的话点一下就整页跳走，人闸队列与脉搏又没了——那正是这次要治的病。
-  视图区.addEventListener('click', (e) => {
+  // 壳里**任何**指向某个视图的链接都要拦，不只是视图区里那些。
+  //
+  // 原来这一条只绑在 视图区 上（班次页的「看报告」、日报的翻页都在片段里）。
+  // 2026-09-02 批六加了在座栏底下那个「＋ 自定义席位」——它长在 `.座栏` 里，
+  // 不在视图区内，于是这条拦截够不着它：**点一下整页跳走，跳出壳**，
+  // 顶条三格、在座栏、说框全没了，回到 08-30 那种割裂的老样子。
+  // 而它的症状很温和（页面确实到了 /seats），最容易被当成"能用"。
+  // 所以改绑 document，用 认视图() 判要不要拦——认不得的照常跳。
+  document.addEventListener('click', (e) => {
     const a = e.target.closest('a[href]');
     if (!a || !该拦(e)) return;
+    if (a.hasAttribute('data-jian')) return;      // 顶栏页签有自己那条，别拦两次
     let u;
     try { u = new URL(a.getAttribute('href'), location.origin); } catch { return; }
     if (u.origin !== location.origin) return;          // 外链放行

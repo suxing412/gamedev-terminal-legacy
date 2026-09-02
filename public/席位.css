@@ -1,0 +1,115 @@
+/* 席位.css — 一席一份协议文档（2026-09-02 批六）。
+ *
+ * 这一页**故意没有表单**：改名、改人设、改人格、改边界一律去文稿台改那份 .md。
+ * 协议档是这一席的唯一事实源；页面只做两件事——把它摆出来、给一个「去改它」的按钮。
+ *
+ * 布局关键宽走 grid 定轨（A5：壳内 Chromium 124 算错嵌套 flex 宽，只在 exe 里复现）。
+ */
+
+.席页 { display: flex; flex-direction: column; min-height: 0; }
+
+.席页头 {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s4);
+  padding: var(--s5) var(--s6) var(--s4);
+  border-bottom: 1px solid var(--line);
+}
+.席页题 { display: flex; align-items: baseline; gap: var(--s3); min-width: 0; }
+.席页题 h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink); }
+.席页数 { font: 400 12px var(--mono); color: var(--ink-3); white-space: nowrap; }
+
+.席建 { display: flex; gap: var(--s2); align-items: center; flex: none; }
+.席建名 {
+  width: 160px; padding: 6px 10px;
+  border: 1px solid var(--line); border-radius: 5px;
+  background: var(--ground); color: var(--ink); font: 400 12px var(--sans);
+  outline: none;
+}
+.席建名::placeholder { color: var(--ink-3); }
+.席建名:focus { border-color: var(--gate); }
+.席建钮 {
+  padding: 7px 14px; border-radius: 5px;
+  border: 1px solid var(--gate-deep); background: var(--gate-wash);
+  color: var(--gate); font: 500 12px var(--sans); cursor: pointer;
+}
+.席建钮:hover { background: color-mix(in oklch, var(--gate) 18%, transparent); }
+
+.席体 { display: grid; grid-template-columns: 280px minmax(0, 1fr); min-height: 0; flex: 1; }
+
+/* ── 左：席表 ────────────────────────────────────────────── */
+.席表 { border-right: 1px solid var(--line); background: var(--panel); overflow-y: auto; }
+.席项 {
+  display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 10px; align-items: center;
+  padding: var(--s3) var(--s4);
+  border-bottom: 1px solid var(--line-soft);
+  color: inherit; text-decoration: none;
+}
+.席项:hover { background: var(--raised); }
+.席项.在 { background: var(--gate-wash); box-shadow: inset 3px 0 0 var(--gate); }
+/* 头像：**形状与字分人，颜色只管状态**（同在座栏那条纪律，见 tokens.css）。 */
+.席头 {
+  width: 32px; height: 32px; border-radius: 9px;
+  background: var(--raised); border: 1px solid var(--line);
+  display: grid; place-items: center;
+  font: 500 13px var(--sans); color: var(--ink-2);
+}
+.席头.大 { width: 52px; height: 52px; border-radius: 14px; font-size: 21px; }
+.席文 { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.席名 { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: var(--ink); }
+.席态 { font: 400 10.5px var(--mono); color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.席自建, .席内建 {
+  font-style: normal; font-size: 9.5px; font-weight: 400;
+  padding: 1px 5px; border-radius: 3px; border: 1px solid var(--line);
+  color: var(--ink-3);
+}
+.席自建 { border-color: var(--gate-deep); color: var(--gate); }
+
+/* ── 右：详情 ────────────────────────────────────────────── */
+.席详 { overflow-y: auto; padding: var(--s5) var(--s6) var(--s6); }
+.席空 { padding: var(--s6); color: var(--ink-2); font-size: 13.5px; line-height: 1.7; }
+.席空 b { display: block; color: var(--ink); font-weight: 500; margin-bottom: var(--s1); }
+
+.席详头 {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s4);
+  padding-bottom: var(--s4); border-bottom: 1px solid var(--line);
+}
+.席详题 { display: flex; gap: var(--s4); align-items: center; min-width: 0; }
+.席详题 h1 { margin: 0; display: flex; align-items: center; gap: var(--s2); font-size: 22px; font-weight: 600; }
+.席详设 { margin: 4px 0 0; font-size: 13px; color: var(--ink-2); line-height: 1.5; }
+.席改 {
+  flex: none; padding: 7px 14px; border-radius: 5px;
+  border: 1px solid var(--gate-deep); background: var(--gate-wash);
+  color: var(--gate); font: 500 12px var(--sans); text-decoration: none; white-space: nowrap;
+}
+.席改:hover { background: color-mix(in oklch, var(--gate) 18%, transparent); }
+.席改.灰 { border-color: var(--line); background: transparent; color: var(--ink-3); cursor: default; }
+
+.席事实 { display: flex; gap: var(--s6); margin: var(--s4) 0 0; flex-wrap: wrap; }
+.席事实 > div { display: flex; flex-direction: column; gap: 3px; }
+.席事实 dt { font-size: 11px; color: var(--ink-3); }
+.席事实 dd { margin: 0; font: 400 12.5px var(--mono); color: var(--ink); }
+.席事实 code { font: 400 12px var(--mono); color: var(--gate); }
+.灰 { color: var(--ink-3); }
+
+.席共守, .席本席 { margin-top: var(--s6); }
+.席段头 {
+  display: flex; align-items: baseline; gap: var(--s3);
+  padding-bottom: var(--s2); margin-bottom: var(--s3);
+  border-bottom: 1px solid var(--line-soft);
+}
+.席段头 h2 { margin: 0; font: 600 12px var(--sans); letter-spacing: 0.06em; color: var(--ink-2); }
+.席段头 span { font-size: 11px; color: var(--ink-3); }
+.席共改 { margin-left: auto; font-size: 11px; color: var(--gate); text-decoration: none; white-space: nowrap; }
+.席共改:hover { color: var(--gate-deep); }
+/* 共守段压一层底：**一眼看出它不属于这一席**，
+   混进本席协议里，人会以为改它只影响这一席。 */
+.席共守 .prose {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  padding: var(--s4) var(--s5);
+}
+.席注 { font-size: 12px; color: var(--ink-3); line-height: 1.7; }
+.席注 code { font: 400 11.5px var(--mono); color: var(--ink-2); }
+
+@media (max-width: 900px) {
+  .席体 { grid-template-columns: minmax(0, 1fr); }
+  .席表 { border-right: 0; border-bottom: 1px solid var(--line); max-height: 34vh; }
+}
